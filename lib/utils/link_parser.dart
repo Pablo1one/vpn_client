@@ -241,9 +241,11 @@ class LinkParser {
           'fp': q['fp'] ?? 'chrome',
           'pbk': q['pbk'] ?? '',
           'sid': q['sid'] ?? '',
+          'flow': q['flow'] ?? '',
           if (transport == 'grpc')
             'serviceName': q['serviceName'] ?? q['grpcServiceName'] ?? '',
-          if (transport == 'httpupgrade' || transport == 'http')
+          if (transport == 'httpupgrade' || transport == 'http' ||
+              transport == 'xhttp')
             'path': q['path'] ?? '/',
           if (transport == 'ws') ...{
             'path': q['path'] ?? '/',
