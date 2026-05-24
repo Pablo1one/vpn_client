@@ -98,6 +98,30 @@ class _WindowsVpnService implements VpnService {
     }
   }
 
+  Future<void> _killExistingProcess() async {
+    if (_process == null) return;
+    await _outSub?.cancel();
+    _outSub = null;
+    await _errSub?.cancel();
+    _errSub = null;
+    final old = _process!;
+    _process = null;
+    old.kill(ProcessSignal.sigterm);
+    await old.exitCode
+        .timeout(
+          const Duration(seconds: 3),
+          onTimeout: () {
+            old.kill();
+            return -1;
+          },
+        )
+        .catchError((_) => -1);
+    // Let WinTun release the TUN interface before we recreate it.
+    await Future.delayed(const Duration(milliseconds: 500));
+    await _configFile?.delete().catchError((_) {});
+    _configFile = null;
+  }
+
   @override
   Future<void> connect(String configJson,
       {List<String> excludedApps = const []}) async {
@@ -114,6 +138,7 @@ class _WindowsVpnService implements VpnService {
       }
 
       await _ensureWintun();
+      await _killExistingProcess();
 
       _configFile = File(
         '${Directory.systemTemp.path}\\vpn_client_${DateTime.now().millisecondsSinceEpoch}.json',
@@ -125,6 +150,8 @@ class _WindowsVpnService implements VpnService {
         ['run', '-c', _configFile!.path],
         runInShell: false,
       );
+      // Capture local ref so the exitCode closure tracks only this process.
+      final proc = _process!;
 
       bool started = false;
       final ready = Completer<void>();
@@ -132,7 +159,6 @@ class _WindowsVpnService implements VpnService {
 
       void checkLine(String line) {
         if (line.isEmpty) return;
-        // Collect lines that look like errors for better diagnostics
         final lower = line.toLowerCase();
         if (lower.contains('error') ||
             lower.contains('fatal') ||
@@ -149,17 +175,19 @@ class _WindowsVpnService implements VpnService {
         }
       }
 
-      _outSub = _process!.stdout
+      _outSub = proc.stdout
           .transform(utf8.decoder)
           .transform(const LineSplitter())
           .listen(checkLine);
 
-      _errSub = _process!.stderr
+      _errSub = proc.stderr
           .transform(utf8.decoder)
           .transform(const LineSplitter())
           .listen(checkLine);
 
-      _process!.exitCode.then((code) {
+      proc.exitCode.then((code) {
+        // Ignore exit of a process that was already replaced by a newer connect().
+        if (_process != proc) return;
         _controller.add(VpnStatus.disconnected);
         if (!started && !ready.isCompleted) {
           final detail = errorLines.isNotEmpty
@@ -191,12 +219,7 @@ class _WindowsVpnService implements VpnService {
   @override
   Future<void> disconnect() async {
     _controller.add(VpnStatus.disconnecting);
-    await _outSub?.cancel();
-    await _errSub?.cancel();
-    _process?.kill(ProcessSignal.sigterm);
-    _process = null;
-    await _configFile?.delete().catchError((_) {});
-    _configFile = null;
+    await _killExistingProcess();
     _controller.add(VpnStatus.disconnected);
   }
 
