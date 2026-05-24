@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 class AppTheme {
   // Jackson Storm palette: near-black navy + electric cyan
   static const cyan = Color(0xFF00D4FF);
+  static const purple = Color(0xFF9340FF); // connected state glow
   static const bg = Color(0xFF060610);
   static const surface = Color(0xFF0E0E1E);
   static const card = Color(0xFF141428);

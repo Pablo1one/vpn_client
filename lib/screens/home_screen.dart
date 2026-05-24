@@ -24,7 +24,7 @@ class HomeScreen extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             _StatusBadge(status: vpn.status),
-            const SizedBox(height: 56),
+            const SizedBox(height: 40),
             _ConnectButton(
               status: vpn.status,
               hasProfile: vpn.activeProfile != null,
@@ -34,7 +34,9 @@ class HomeScreen extends StatelessWidget {
                       ? vpn.disconnect
                       : vpn.connect,
             ),
-            const SizedBox(height: 40),
+            const SizedBox(height: 20),
+            _ConnectionTimer(connectedAt: vpn.connectedAt),
+            const SizedBox(height: 20),
             _ProfileLabel(name: vpn.activeProfile?.name),
             const SizedBox(height: 6),
             if (vpn.activeProfile != null)
@@ -125,7 +127,7 @@ class _ConnectButton extends StatelessWidget {
     final active = hasProfile && !busy;
 
     final color = connected
-        ? AppTheme.cyan
+        ? AppTheme.purple
         : active
             ? const Color(0xFF3A5060)
             : const Color(0xFF1E2535);
@@ -138,32 +140,37 @@ class _ConnectButton extends StatelessWidget {
         height: 168,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: color.withOpacity(connected ? 0.12 : 0.06),
+          color: color.withOpacity(connected ? 0.10 : 0.06),
           border: Border.all(
-            color: color.withOpacity(active ? 0.9 : 0.3),
-            width: 2,
+            color: color.withOpacity(active ? 0.85 : 0.25),
+            width: connected ? 2.5 : 2,
           ),
           boxShadow: connected
               ? [
                   BoxShadow(
-                    color: AppTheme.cyan.withOpacity(0.25),
-                    blurRadius: 32,
-                    spreadRadius: 4,
-                  )
+                    color: AppTheme.purple.withOpacity(0.35),
+                    blurRadius: 44,
+                    spreadRadius: 6,
+                  ),
+                  BoxShadow(
+                    color: AppTheme.purple.withOpacity(0.15),
+                    blurRadius: 80,
+                    spreadRadius: 16,
+                  ),
                 ]
               : null,
         ),
         child: busy
-            ? Center(
+            ? const Center(
                 child: CircularProgressIndicator(
-                  color: const Color(0xFFFFB300),
+                  color: Color(0xFFFFB300),
                   strokeWidth: 2.5,
                 ),
               )
             : Icon(
                 Icons.power_settings_new_rounded,
                 size: 68,
-                color: color.withOpacity(active ? 1 : 0.35),
+                color: color.withOpacity(active ? 1 : 0.3),
               ),
       ),
     );
@@ -188,6 +195,38 @@ class _ProfileLabel extends StatelessWidget {
             ? const Color(0xFFB0C4D8)
             : const Color(0xFF3A4A5A),
       ),
+    );
+  }
+}
+
+// ── Connection timer ──────────────────────────────────────────────────────────
+
+class _ConnectionTimer extends StatelessWidget {
+  final DateTime? connectedAt;
+  const _ConnectionTimer({this.connectedAt});
+
+  @override
+  Widget build(BuildContext context) {
+    if (connectedAt == null) return const SizedBox(height: 28);
+    return StreamBuilder<int>(
+      stream: Stream.periodic(const Duration(seconds: 1), (i) => i),
+      builder: (_, __) {
+        final elapsed = DateTime.now().difference(connectedAt!);
+        final h = elapsed.inHours;
+        final m = (elapsed.inMinutes % 60).toString().padLeft(2, '0');
+        final s = (elapsed.inSeconds % 60).toString().padLeft(2, '0');
+        final label = h > 0 ? '${h.toString().padLeft(2, '0')}:$m:$s' : '$m:$s';
+        return Text(
+          label,
+          style: const TextStyle(
+            color: AppTheme.purple,
+            fontSize: 22,
+            fontWeight: FontWeight.w700,
+            fontFamily: 'monospace',
+            letterSpacing: 3,
+          ),
+        );
+      },
     );
   }
 }
