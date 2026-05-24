@@ -1,0 +1,3 @@
+-keep class io.nekohasekai.** { *; }
+-keep class com.example.vpn_client.** { *; }
+-dontwarn io.nekohasekai.**

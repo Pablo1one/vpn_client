@@ -32,7 +32,10 @@ macos/Flutter/
 .vscode/
 *.iml
 
-# Sensitive
+# Sensitive / large binaries (download separately via scripts/)
 .env
 *.env
 singbox/
+assets/bin/sing-box.exe
+android/app/libs/libbox.aar
+ios/LibBox.xcframework/
