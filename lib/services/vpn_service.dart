@@ -128,8 +128,18 @@ class _WindowsVpnService implements VpnService {
 
       bool started = false;
       final ready = Completer<void>();
+      final errorLines = <String>[];
 
       void checkLine(String line) {
+        if (line.isEmpty) return;
+        // Collect lines that look like errors for better diagnostics
+        final lower = line.toLowerCase();
+        if (lower.contains('error') ||
+            lower.contains('fatal') ||
+            lower.contains('failed') ||
+            lower.contains('invalid')) {
+          errorLines.add(line.trim());
+        }
         if (!started &&
             (line.contains('sing-box started') ||
                 (line.contains('started') && line.contains('inbound/')))) {
@@ -152,8 +162,12 @@ class _WindowsVpnService implements VpnService {
       _process!.exitCode.then((code) {
         _controller.add(VpnStatus.disconnected);
         if (!started && !ready.isCompleted) {
+          final detail = errorLines.isNotEmpty
+              ? '\n${errorLines.take(3).join('\n')}'
+              : '';
           ready.completeError(
-            Exception('sing-box exited (code $code) before connecting'),
+            Exception(
+                'sing-box exited (code $code) before connecting$detail'),
           );
         }
       });

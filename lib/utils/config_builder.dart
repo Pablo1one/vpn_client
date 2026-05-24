@@ -20,9 +20,6 @@ class ConfigBuilder {
       'log': {'level': 'warn'},
       'dns': _dns(russiaBypass: ruMode),
       'inbounds': [_tun()],
-      'experimental': {
-        'clash_api': {'external_controller': '127.0.0.1:9090'},
-      },
       'outbounds': [
         _outbound(profile),
         {'type': 'direct', 'tag': 'direct'},
