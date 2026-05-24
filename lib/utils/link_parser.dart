@@ -411,7 +411,7 @@ class LinkParser {
           : 51820;
 
       // AmneziaWG obfuscation params (Jc, Jmin, Jmax, S1, S2, H1–H4)
-      const awgKeys = {'jc', 'jmin', 'jmax', 's1', 's2', 'h1', 'h2', 'h3', 'h4'};
+      const awgKeys = {'jc', 'jmin', 'jmax', 's1', 's2', 's3', 's4', 'h1', 'h2', 'h3', 'h4'};
       final awgParams = <String, dynamic>{};
       for (final k in awgKeys) {
         final v = data['interface_$k'];

@@ -38,6 +38,37 @@ class ConfigBuilder {
   static String toJson(Map<String, dynamic> config) =>
       const JsonEncoder.withIndent('  ').convert(config);
 
+  /// Generates a WireGuard .conf for amneziawg.exe (AWG 1.x and 2.0).
+  static String buildAwgConf(VpnProfile profile) {
+    final c = profile.config;
+    final buf = StringBuffer();
+
+    buf.writeln('[Interface]');
+    buf.writeln('PrivateKey = ${c['privateKey']}');
+    buf.writeln('Address = ${c['address']}');
+    buf.writeln('DNS = 1.1.1.1, 8.8.8.8');
+
+    const awgParamKeys = [
+      'Jc', 'Jmin', 'Jmax', 'S1', 'S2', 'S3', 'S4',
+      'H1', 'H2', 'H3', 'H4',
+    ];
+    for (final k in awgParamKeys) {
+      final v = c[k.toLowerCase()];
+      if (v != null) buf.writeln('$k = $v');
+    }
+
+    buf.writeln('');
+    buf.writeln('[Peer]');
+    buf.writeln('PublicKey = ${c['publicKey']}');
+    final psk = c['presharedKey'] as String? ?? '';
+    if (psk.isNotEmpty) buf.writeln('PresharedKey = $psk');
+    buf.writeln('Endpoint = ${c['server']}:${c['port']}');
+    buf.writeln('AllowedIPs = 0.0.0.0/0, ::/0');
+    buf.writeln('PersistentKeepalive = 25');
+
+    return buf.toString();
+  }
+
   // ── Outbound ────────────────────────────────────────────────────────────────
 
   static Map<String, dynamic> _outbound(VpnProfile p) => switch (p.protocol) {
