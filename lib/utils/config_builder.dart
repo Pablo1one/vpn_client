@@ -112,8 +112,8 @@ class ConfigBuilder {
         .toList();
 
     final peer = <String, dynamic>{
-      'address': c['server'],
-      'port': c['port'],
+      'server': c['server'],
+      'server_port': c['port'],
       'public_key': c['publicKey'],
       if ((c['presharedKey'] as String? ?? '').isNotEmpty)
         'pre_shared_key': c['presharedKey'],
@@ -215,7 +215,10 @@ class ConfigBuilder {
       case RoutingMode.russiaBypass:
         // Route .ru / .рф / .su domains directly, no remote rule-set download needed
         rules.add({'domain_suffix': ['.ru', '.рф', '.su'], 'outbound': 'direct'});
-        rules.add({'domain': ['yandex.com', 'yandex.net', 'ya.ru'], 'outbound': 'direct'});
+        rules.add({
+          'domain_suffix': ['yandex.com', 'yandex.net', 'ya.ru', 'yastatic.net'],
+          'outbound': 'direct',
+        });
       case RoutingMode.custom:
         if (bypassDomains.isNotEmpty) {
           rules.add({'domain_suffix': bypassDomains, 'outbound': 'direct'});
