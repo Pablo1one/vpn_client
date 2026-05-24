@@ -1,33 +1,48 @@
-# Download sing-box.exe for Windows and place it in assets/bin/
+# Download sing-box.exe + wintun.dll for Windows and place them in assets/bin/
 # Run from the vpn_client project root:
 #   powershell -ExecutionPolicy Bypass -File scripts\download_singbox.ps1
 
 param(
-    [string]$Version = "1.11.0"
+    [string]$SingBoxVersion = "1.11.0",
+    [string]$WinTunVersion  = "0.14.1"
 )
 
 $ErrorActionPreference = "Stop"
-$outDir  = "$PSScriptRoot\..\assets\bin"
-$outFile = "$outDir\sing-box.exe"
-$url     = "https://github.com/SagerNet/sing-box/releases/download/v$Version/sing-box-${Version}-windows-amd64.zip"
-
-if (Test-Path $outFile) {
-    Write-Host "sing-box.exe already exists at $outFile"
-    exit 0
-}
-
+$outDir = "$PSScriptRoot\..\assets\bin"
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 
-$zip = "$env:TEMP\sing-box.zip"
-Write-Host "Downloading sing-box v$Version from GitHub..."
-Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+# ── sing-box.exe ──────────────────────────────────────────────────────────────
+$sbFile = "$outDir\sing-box.exe"
+if (-not (Test-Path $sbFile)) {
+    $sbUrl = "https://github.com/SagerNet/sing-box/releases/download/v$SingBoxVersion/sing-box-${SingBoxVersion}-windows-amd64.zip"
+    $zip = "$env:TEMP\sing-box.zip"
+    Write-Host "Downloading sing-box v$SingBoxVersion..."
+    Invoke-WebRequest -Uri $sbUrl -OutFile $zip -UseBasicParsing
+    Expand-Archive -Path $zip -DestinationPath "$env:TEMP\sb-extract" -Force
+    $exe = Get-ChildItem "$env:TEMP\sb-extract" -Recurse -Filter "sing-box.exe" | Select-Object -First 1
+    Copy-Item $exe.FullName -Destination $sbFile
+    Remove-Item $zip, "$env:TEMP\sb-extract" -Recurse -Force
+    Write-Host "  -> $sbFile"
+} else {
+    Write-Host "sing-box.exe already present"
+}
 
-Write-Host "Extracting..."
-Expand-Archive -Path $zip -DestinationPath "$env:TEMP\sing-box-extract" -Force
-$exe = Get-ChildItem "$env:TEMP\sing-box-extract" -Recurse -Filter "sing-box.exe" | Select-Object -First 1
-Copy-Item $exe.FullName -Destination $outFile
+# ── wintun.dll ────────────────────────────────────────────────────────────────
+$wtFile = "$outDir\wintun.dll"
+if (-not (Test-Path $wtFile)) {
+    $wtUrl = "https://www.wintun.net/builds/wintun-${WinTunVersion}.zip"
+    $zip = "$env:TEMP\wintun.zip"
+    Write-Host "Downloading WinTun v$WinTunVersion..."
+    Invoke-WebRequest -Uri $wtUrl -OutFile $zip -UseBasicParsing
+    Expand-Archive -Path $zip -DestinationPath "$env:TEMP\wt-extract" -Force
+    $dll = Get-ChildItem "$env:TEMP\wt-extract" -Recurse -Filter "wintun.dll" |
+           Where-Object { $_.FullName -like "*amd64*" } | Select-Object -First 1
+    Copy-Item $dll.FullName -Destination $wtFile
+    Remove-Item $zip, "$env:TEMP\wt-extract" -Recurse -Force
+    Write-Host "  -> $wtFile"
+} else {
+    Write-Host "wintun.dll already present"
+}
 
-Remove-Item $zip -Force
-Remove-Item "$env:TEMP\sing-box-extract" -Recurse -Force
-
-Write-Host "Done: $outFile"
+Write-Host ""
+Write-Host "Done. Run 'flutter build windows --release' to include these in the app."
