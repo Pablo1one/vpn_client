@@ -20,3 +20,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    # sing-box binary for Windows — download from GitHub releases and place here.
+    # https://github.com/SagerNet/sing-box/releases → sing-box_*_windows_amd64.zip
+    - assets/bin/sing-box.exe

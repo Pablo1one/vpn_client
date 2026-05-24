@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+
+import 'package:flutter/services.dart';
 
 enum VpnStatus { disconnected, connecting, connected, disconnecting, error }
 
@@ -10,90 +13,143 @@ abstract class VpnService {
   void dispose();
 
   factory VpnService.create() {
-    if (Platform.isAndroid) return _AndroidVpnService();
-    if (Platform.isIOS) return _IosVpnService();
+    if (Platform.isAndroid) return _MobileVpnService();
+    if (Platform.isIOS) return _MobileVpnService();
     if (Platform.isWindows) return _WindowsVpnService();
-    throw UnsupportedError('Platform not supported: ${Platform.operatingSystem}');
+    throw UnsupportedError('Unsupported platform: ${Platform.operatingSystem}');
   }
 }
 
-// ─── Android ────────────────────────────────────────────────────────────────
-// Uses a MethodChannel to communicate with a Kotlin VpnService that runs
-// sing-box via JNI (libbox.aar). See android/app/src/main/kotlin/VpnPlugin.kt.
-class _AndroidVpnService implements VpnService {
+// ─── Mobile (Android + iOS) ──────────────────────────────────────────────────
+// Both platforms share the same MethodChannel/EventChannel protocol.
+// Android: implemented in VpnPlugin.kt + SingBoxVpnService.kt
+// iOS:     implemented in VpnPlugin.swift + PacketTunnelProvider.swift
+class _MobileVpnService implements VpnService {
+  static const _method = MethodChannel('com.example.vpn_client/vpn');
+  static const _events = EventChannel('com.example.vpn_client/vpn_events');
+
   final _controller = StreamController<VpnStatus>.broadcast();
+  late final StreamSubscription _sub;
+
+  _MobileVpnService() {
+    _sub = _events.receiveBroadcastStream().listen(
+      (event) => _controller.add(_parse(event as String)),
+      onError: (_) => _controller.add(VpnStatus.error),
+    );
+  }
+
+  VpnStatus _parse(String s) => switch (s) {
+        'connected' => VpnStatus.connected,
+        'connecting' => VpnStatus.connecting,
+        'disconnecting' => VpnStatus.disconnecting,
+        'disconnected' => VpnStatus.disconnected,
+        _ => VpnStatus.error,
+      };
 
   @override
   Stream<VpnStatus> get statusStream => _controller.stream;
 
   @override
-  Future<void> connect(String singboxConfigJson) async {
-    _controller.add(VpnStatus.connecting);
-    // TODO: call platform channel 'vpn/connect' with singboxConfigJson
-    // await const MethodChannel('vpn_client/vpn').invokeMethod('connect', singboxConfigJson);
-    throw UnimplementedError('Android VPN: implement platform channel in VpnPlugin.kt');
+  Future<void> connect(String config) =>
+      _method.invokeMethod('connect', {'config': config});
+
+  @override
+  Future<void> disconnect() => _method.invokeMethod('disconnect');
+
+  @override
+  void dispose() {
+    _sub.cancel();
+    _controller.close();
   }
-
-  @override
-  Future<void> disconnect() async {
-    _controller.add(VpnStatus.disconnecting);
-    // TODO: call platform channel 'vpn/disconnect'
-    _controller.add(VpnStatus.disconnected);
-  }
-
-  @override
-  void dispose() => _controller.close();
-}
-
-// ─── iOS ─────────────────────────────────────────────────────────────────────
-// Uses a MethodChannel to start a NetworkExtension PacketTunnelProvider that
-// runs sing-box. See ios/Runner/VpnPlugin.swift + ios/TunnelExtension/*.swift.
-class _IosVpnService implements VpnService {
-  final _controller = StreamController<VpnStatus>.broadcast();
-
-  @override
-  Stream<VpnStatus> get statusStream => _controller.stream;
-
-  @override
-  Future<void> connect(String singboxConfigJson) async {
-    _controller.add(VpnStatus.connecting);
-    // TODO: call platform channel 'vpn_client/vpn' → 'connect'
-    throw UnimplementedError('iOS VPN: implement NetworkExtension in VpnPlugin.swift');
-  }
-
-  @override
-  Future<void> disconnect() async {
-    _controller.add(VpnStatus.disconnecting);
-    _controller.add(VpnStatus.disconnected);
-  }
-
-  @override
-  void dispose() => _controller.close();
 }
 
 // ─── Windows ─────────────────────────────────────────────────────────────────
-// Writes sing-box config to a temp file and spawns sing-box.exe as a subprocess.
-// Requires: sing-box.exe placed in assets/bin/sing-box.exe (not committed).
-// WinTun driver must be installed for TUN support.
+// Launches sing-box.exe as a subprocess with the generated config.
+// Requires sing-box.exe at: <app_dir>\data\flutter_assets\assets\bin\sing-box.exe
+// WinTun driver must be installed: https://www.wintun.net/
+// Run the app as Administrator for TUN interface creation.
 class _WindowsVpnService implements VpnService {
   final _controller = StreamController<VpnStatus>.broadcast();
   Process? _process;
+  StreamSubscription? _outSub;
+  StreamSubscription? _errSub;
+  File? _configFile;
 
   @override
   Stream<VpnStatus> get statusStream => _controller.stream;
 
+  String get _exePath {
+    final appDir = File(Platform.resolvedExecutable).parent.path;
+    return '$appDir\\data\\flutter_assets\\assets\\bin\\sing-box.exe';
+  }
+
   @override
-  Future<void> connect(String singboxConfigJson) async {
+  Future<void> connect(String configJson) async {
     _controller.add(VpnStatus.connecting);
     try {
-      // TODO: locate sing-box.exe from app bundle assets
-      // final exePath = '${Directory.current.path}/data/flutter_assets/assets/bin/sing-box.exe';
-      // final configFile = File('${Directory.systemTemp.path}/sbconfig.json');
-      // await configFile.writeAsString(singboxConfigJson);
-      // _process = await Process.start(exePath, ['run', '-c', configFile.path]);
-      // _process!.exitCode.then((_) => _controller.add(VpnStatus.disconnected));
-      // _controller.add(VpnStatus.connected);
-      throw UnimplementedError('Windows VPN: place sing-box.exe in assets/bin/ and uncomment code above');
+      final exe = File(_exePath);
+      if (!exe.existsSync()) {
+        throw Exception(
+          'sing-box.exe not found.\n'
+          'Expected: ${exe.path}\n'
+          'Download from https://github.com/SagerNet/sing-box/releases '
+          'and place at assets/bin/sing-box.exe, then rebuild.',
+        );
+      }
+
+      _configFile = File(
+        '${Directory.systemTemp.path}\\vpn_client_${DateTime.now().millisecondsSinceEpoch}.json',
+      );
+      await _configFile!.writeAsString(configJson);
+
+      _process = await Process.start(
+        exe.path,
+        ['run', '-c', _configFile!.path],
+        runInShell: false,
+      );
+
+      bool started = false;
+      final ready = Completer<void>();
+
+      void checkLine(String line) {
+        if (!started &&
+            (line.contains('sing-box started') ||
+                (line.contains('started') && line.contains('inbound/')))) {
+          started = true;
+          _controller.add(VpnStatus.connected);
+          if (!ready.isCompleted) ready.complete();
+        }
+      }
+
+      _outSub = _process!.stdout
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .listen(checkLine);
+
+      _errSub = _process!.stderr
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .listen(checkLine);
+
+      _process!.exitCode.then((code) {
+        _controller.add(VpnStatus.disconnected);
+        if (!started && !ready.isCompleted) {
+          ready.completeError(
+            Exception('sing-box exited (code $code) before connecting'),
+          );
+        }
+      });
+
+      // Fall back to "connected" after 5 s if no matching log line appears.
+      Future.delayed(const Duration(seconds: 5), () {
+        if (!started && !ready.isCompleted) {
+          started = true;
+          _controller.add(VpnStatus.connected);
+          ready.complete();
+        }
+      });
+
+      await ready.future;
     } catch (e) {
       _controller.add(VpnStatus.error);
       rethrow;
@@ -103,8 +159,12 @@ class _WindowsVpnService implements VpnService {
   @override
   Future<void> disconnect() async {
     _controller.add(VpnStatus.disconnecting);
-    _process?.kill();
+    await _outSub?.cancel();
+    await _errSub?.cancel();
+    _process?.kill(ProcessSignal.sigterm);
     _process = null;
+    await _configFile?.delete().catchError((_) {});
+    _configFile = null;
     _controller.add(VpnStatus.disconnected);
   }
 
