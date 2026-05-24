@@ -1,6 +1,6 @@
 import 'dart:math';
 
-enum VpnProtocol { vless, wireguard, tuic, hysteria2 }
+enum VpnProtocol { vless, wireguard, tuic, hysteria2, amnezia }
 
 class VpnProfile {
   final String id;
@@ -39,6 +39,7 @@ class VpnProfile {
         name: json['name'] as String,
         protocol: VpnProtocol.values.firstWhere(
           (e) => e.name == json['protocol'],
+          orElse: () => VpnProtocol.vless,
         ),
         config: Map<String, dynamic>.from(json['config'] as Map),
         createdAt: DateTime.parse(json['createdAt'] as String),
@@ -49,13 +50,15 @@ class VpnProfile {
         VpnProtocol.wireguard => 'WireGuard',
         VpnProtocol.tuic => 'TUIC',
         VpnProtocol.hysteria2 => 'Hysteria2',
+        VpnProtocol.amnezia => 'AmneziaWG',
       };
 
   String get serverHost => switch (protocol) {
         VpnProtocol.vless ||
         VpnProtocol.tuic ||
         VpnProtocol.hysteria2 ||
-        VpnProtocol.wireguard =>
+        VpnProtocol.wireguard ||
+        VpnProtocol.amnezia =>
           config['server'] as String? ?? '',
       };
 }

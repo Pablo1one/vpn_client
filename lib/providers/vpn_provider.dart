@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/profile.dart';
 import '../services/profile_repository.dart';
@@ -13,14 +15,18 @@ class VpnProvider extends ChangeNotifier {
   VpnProfile? _activeProfile;
   List<VpnProfile> _profiles = [];
   bool _killSwitch = false;
+  RoutingMode _routingMode = RoutingMode.fullVpn;
   List<String> _bypassDomains = [];
+  List<String> _excludedApps = [];
   String? _error;
 
   VpnStatus get status => _status;
   VpnProfile? get activeProfile => _activeProfile;
   List<VpnProfile> get profiles => List.from(_profiles);
   bool get killSwitch => _killSwitch;
+  RoutingMode get routingMode => _routingMode;
   List<String> get bypassDomains => List.from(_bypassDomains);
+  List<String> get excludedApps => List.from(_excludedApps);
   String? get error => _error;
   bool get isConnected => _status == VpnStatus.connected;
   bool get isBusy =>
@@ -44,6 +50,11 @@ class VpnProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     _killSwitch = prefs.getBool('killSwitch') ?? false;
     _bypassDomains = prefs.getStringList('bypassDomains') ?? [];
+    _excludedApps = prefs.getStringList('excludedApps') ?? [];
+    _routingMode = RoutingMode.values.firstWhere(
+      (m) => m.name == (prefs.getString('routingMode') ?? 'fullVpn'),
+      orElse: () => RoutingMode.fullVpn,
+    );
 
     final lastId = prefs.getString('lastProfileId');
     if (lastId != null) {
@@ -62,10 +73,14 @@ class VpnProvider extends ChangeNotifier {
     try {
       final config = ConfigBuilder.build(
         _activeProfile!,
+        routingMode: _routingMode,
         killSwitch: _killSwitch,
         bypassDomains: _bypassDomains,
       );
-      await _vpn.connect(ConfigBuilder.toJson(config));
+      await _vpn.connect(
+        ConfigBuilder.toJson(config),
+        excludedApps: _excludedApps,
+      );
     } catch (e) {
       _status = VpnStatus.error;
       _error = e.toString().replaceFirst('UnimplementedError: ', '');
@@ -81,6 +96,14 @@ class VpnProvider extends ChangeNotifier {
 
   Future<void> addProfile(VpnProfile profile) async {
     await _repo.add(profile);
+    _profiles = _repo.getAll().toList();
+    notifyListeners();
+  }
+
+  Future<void> addProfiles(List<VpnProfile> list) async {
+    for (final p in list) {
+      await _repo.add(p);
+    }
     _profiles = _repo.getAll().toList();
     notifyListeners();
   }
@@ -107,11 +130,45 @@ class VpnProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setRoutingMode(RoutingMode mode) async {
+    _routingMode = mode;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('routingMode', mode.name);
+    notifyListeners();
+  }
+
   Future<void> setBypassDomains(List<String> domains) async {
     _bypassDomains = domains;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList('bypassDomains', domains);
     notifyListeners();
+  }
+
+  Future<void> setExcludedApps(List<String> apps) async {
+    _excludedApps = apps;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('excludedApps', apps);
+    notifyListeners();
+  }
+
+  /// Returns list of installed apps as {package, name} maps (Android only).
+  Future<List<Map<String, String>>> getInstalledApps() async {
+    if (!Platform.isAndroid) return [];
+    try {
+      const ch = MethodChannel('com.example.vpn_client/vpn');
+      final raw =
+          await ch.invokeListMethod<Map<Object?, Object?>>('getInstalledApps');
+      return (raw ?? [])
+          .map((m) => {
+                'package': (m['package'] as String?) ?? '',
+                'name': (m['name'] as String?) ?? '',
+              })
+          .where((m) => m['package']!.isNotEmpty)
+          .toList();
+    } catch (e) {
+      debugPrint('getInstalledApps error: $e');
+      return [];
+    }
   }
 
   @override

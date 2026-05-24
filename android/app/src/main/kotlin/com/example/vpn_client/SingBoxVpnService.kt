@@ -21,15 +21,14 @@ class SingBoxVpnService : VpnService() {
         const val ACTION_CONNECT    = "com.example.vpn_client.CONNECT"
         const val ACTION_DISCONNECT = "com.example.vpn_client.DISCONNECT"
         const val EXTRA_CONFIG      = "config"
+        const val EXTRA_EXCLUDED_APPS = "excluded_apps"
 
         private const val NOTIF_CH = "vpn_service"
         private const val NOTIF_ID = 1
 
-        // Called by VpnPlugin to forward status events to Flutter.
         var statusListener: ((String) -> Unit)? = null
     }
 
-    // private var box: BoxService? = null
     private var tunInterface: ParcelFileDescriptor? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -38,8 +37,10 @@ class SingBoxVpnService : VpnService() {
                 val config = intent.getStringExtra(EXTRA_CONFIG) ?: run {
                     stopSelf(); return START_NOT_STICKY
                 }
+                val excludedApps = intent.getStringArrayListExtra(EXTRA_EXCLUDED_APPS)
+                    ?: arrayListOf()
                 startForeground(NOTIF_ID, buildNotification())
-                runCatching { startTunnel(config) }.onFailure {
+                runCatching { startTunnel(config, excludedApps) }.onFailure {
                     statusListener?.invoke("error: ${it.message}")
                     stopSelf()
                 }
@@ -49,33 +50,11 @@ class SingBoxVpnService : VpnService() {
         return START_STICKY
     }
 
-    private fun startTunnel(config: String) {
+    private fun startTunnel(config: String, excludedApps: List<String>) {
         // ── Build TUN interface ──────────────────────────────────────────────
-        // When libbox.aar is present, replace this block with:
-        //
-        //   val platform = object : PlatformInterface {
-        //       override fun openTun(options: TunOptions): Int {
-        //           val b = Builder()
-        //               .setSession("vpn_client")
-        //               .addAddress(options.inet4Address, options.inet4Prefix)
-        //               .addRoute("0.0.0.0", 0)
-        //               .addDnsServer(options.dnsServer ?: "1.1.1.1")
-        //               .setMtu(options.mtu.toInt())
-        //           options.inet6Address?.let { b.addAddress(it, options.inet6Prefix) }
-        //           tunInterface = b.establish()
-        //           return tunInterface!!.detachFd()
-        //       }
-        //       override fun usePlatformDefaultInterfaceMonitor() = false
-        //       override fun useSystemDNS() = false
-        //       override fun findConnectionOwner(n: Int, s: String, sp: Int, d: String, dp: Int) = ""
-        //       override fun packageNameByUid(uid: Int) = ""
-        //       override fun uidByPackageName(pkg: String) = 0
-        //   }
-        //   box = Libbox.newService(config, platform, null, false)
-        //   box?.start()
-        //
-        // For now, create a minimal TUN manually using the config's first tun inbound.
-        tunInterface = Builder()
+        // When libbox.aar is present, replace this block with the Libbox.newService call.
+        // See comments in original file for the full PlatformInterface implementation.
+        val builder = Builder()
             .setSession("vpn_client")
             .addAddress("172.19.0.1", 30)
             .addAddress("fdfe:dcba:9876::1", 126)
@@ -83,14 +62,17 @@ class SingBoxVpnService : VpnService() {
             .addRoute("::", 0)
             .addDnsServer("1.1.1.1")
             .setMtu(9000)
-            .establish()
 
+        // Exclude selected apps from VPN (they route directly)
+        excludedApps.forEach { pkg ->
+            try { builder.addDisallowedApplication(pkg) } catch (_: Exception) {}
+        }
+
+        tunInterface = builder.establish()
         statusListener?.invoke("connected")
     }
 
     private fun stopTunnel() {
-        // box?.close()
-        // box = null
         tunInterface?.close()
         tunInterface = null
         statusListener?.invoke("disconnected")

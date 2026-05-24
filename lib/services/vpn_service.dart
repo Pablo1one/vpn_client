@@ -8,7 +8,8 @@ enum VpnStatus { disconnected, connecting, connected, disconnecting, error }
 
 abstract class VpnService {
   Stream<VpnStatus> get statusStream;
-  Future<void> connect(String singboxConfigJson);
+  Future<void> connect(String singboxConfigJson,
+      {List<String> excludedApps = const []});
   Future<void> disconnect();
   void dispose();
 
@@ -50,8 +51,10 @@ class _MobileVpnService implements VpnService {
   Stream<VpnStatus> get statusStream => _controller.stream;
 
   @override
-  Future<void> connect(String config) =>
-      _method.invokeMethod('connect', {'config': config});
+  Future<void> connect(String config,
+          {List<String> excludedApps = const []}) =>
+      _method.invokeMethod(
+          'connect', {'config': config, 'excludedApps': excludedApps});
 
   @override
   Future<void> disconnect() => _method.invokeMethod('disconnect');
@@ -96,7 +99,8 @@ class _WindowsVpnService implements VpnService {
   }
 
   @override
-  Future<void> connect(String configJson) async {
+  Future<void> connect(String configJson,
+      {List<String> excludedApps = const []}) async {
     _controller.add(VpnStatus.connecting);
     try {
       final exe = File(_exePath);

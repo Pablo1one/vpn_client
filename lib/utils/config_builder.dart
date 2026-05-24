@@ -1,15 +1,24 @@
 import 'dart:convert';
 import '../models/profile.dart';
 
+enum RoutingMode { fullVpn, russiaBypass, custom }
+
 class ConfigBuilder {
+  static const _geositeRuUrl =
+      'https://github.com/SagerNet/sing-geosite/releases/latest/download/geosite-ru.srs';
+  static const _geoipRuUrl =
+      'https://github.com/SagerNet/sing-geoip/releases/latest/download/geoip-ru.srs';
+
   static Map<String, dynamic> build(
     VpnProfile profile, {
-    bool killSwitch = false,
+    RoutingMode routingMode = RoutingMode.fullVpn,
     List<String> bypassDomains = const [],
+    bool killSwitch = false,
   }) {
+    final ruMode = routingMode == RoutingMode.russiaBypass;
     return {
       'log': {'level': 'warn'},
-      'dns': _dns(),
+      'dns': _dns(russiaBypass: ruMode),
       'inbounds': [_tun()],
       'outbounds': [
         _outbound(profile),
@@ -17,16 +26,23 @@ class ConfigBuilder {
         {'type': 'block', 'tag': 'block'},
         {'type': 'dns', 'tag': 'dns-out'},
       ],
-      'route': _route(killSwitch: killSwitch, bypassDomains: bypassDomains),
+      'route': _route(
+        routingMode: routingMode,
+        bypassDomains: bypassDomains,
+        killSwitch: killSwitch,
+      ),
     };
   }
 
   static String toJson(Map<String, dynamic> config) =>
       const JsonEncoder.withIndent('  ').convert(config);
 
+  // ── Outbound ────────────────────────────────────────────────────────────────
+
   static Map<String, dynamic> _outbound(VpnProfile p) => switch (p.protocol) {
         VpnProtocol.vless => _vless(p.config),
         VpnProtocol.wireguard => _wireguard(p.config),
+        VpnProtocol.amnezia => _amnezia(p.config),
         VpnProtocol.tuic => _tuic(p.config),
         VpnProtocol.hysteria2 => _hysteria2(p.config),
       };
@@ -75,6 +91,12 @@ class ConfigBuilder {
           'path': c['path'] ?? '/',
           'headers': {'Host': c['host'] ?? c['sni']},
         };
+      case 'xhttp':
+        out['transport'] = {
+          'type': 'http',
+          'host': [c['sni']],
+          'path': c['path'] ?? '/',
+        };
     }
 
     return out;
@@ -93,10 +115,23 @@ class ConfigBuilder {
       'server_port': c['port'],
       'private_key': c['privateKey'],
       'peer_public_key': c['publicKey'],
-      if ((c['presharedKey'] as String).isNotEmpty)
+      if ((c['presharedKey'] as String? ?? '').isNotEmpty)
         'pre_shared_key': c['presharedKey'],
       'local_address': addresses,
     };
+  }
+
+  static Map<String, dynamic> _amnezia(Map<String, dynamic> c) {
+    final base = _wireguard(c);
+    // AmneziaWG obfuscation params (supported in patched sing-box builds)
+    final amneziaFields = <String, dynamic>{};
+    for (final k in ['jc', 'jmin', 'jmax', 's1', 's2', 'h1', 'h2', 'h3', 'h4']) {
+      if (c.containsKey(k)) amneziaFields[k] = c[k];
+    }
+    if (amneziaFields.isNotEmpty) {
+      return {...base, 'amnezia': amneziaFields};
+    }
+    return base;
   }
 
   static Map<String, dynamic> _tuic(Map<String, dynamic> c) => {
@@ -135,6 +170,8 @@ class ConfigBuilder {
     return out;
   }
 
+  // ── TUN inbound ─────────────────────────────────────────────────────────────
+
   static Map<String, dynamic> _tun() => {
         'type': 'tun',
         'tag': 'tun-in',
@@ -149,29 +186,66 @@ class ConfigBuilder {
         'sniff_override_destination': true,
       };
 
-  static Map<String, dynamic> _dns() => {
+  // ── DNS ─────────────────────────────────────────────────────────────────────
+
+  static Map<String, dynamic> _dns({bool russiaBypass = false}) => {
         'servers': [
           {'tag': 'remote', 'address': 'tls://1.1.1.1', 'detour': 'proxy'},
-          {'tag': 'local', 'address': '223.5.5.5', 'detour': 'direct'},
+          {'tag': 'local', 'address': 'tls://8.8.8.8', 'detour': 'direct'},
         ],
         'rules': [
           {'outbound': 'any', 'server': 'local'},
+          if (russiaBypass) {'rule_set': ['geosite-ru'], 'server': 'local'},
         ],
         'final': 'remote',
       };
 
+  // ── Route ────────────────────────────────────────────────────────────────────
+
   static Map<String, dynamic> _route({
-    required bool killSwitch,
+    required RoutingMode routingMode,
     required List<String> bypassDomains,
+    required bool killSwitch,
   }) {
+    final ruleSets = <Map<String, dynamic>>[];
     final rules = <Map<String, dynamic>>[
       {'protocol': 'dns', 'outbound': 'dns-out'},
-      if (bypassDomains.isNotEmpty)
-        {'domain_suffix': bypassDomains, 'outbound': 'direct'},
-      {'ip_is_private': true, 'outbound': 'direct'},
     ];
 
+    switch (routingMode) {
+      case RoutingMode.russiaBypass:
+        ruleSets.addAll([
+          {
+            'type': 'remote',
+            'tag': 'geosite-ru',
+            'format': 'binary',
+            'url': _geositeRuUrl,
+            'download_detour': 'direct',
+          },
+          {
+            'type': 'remote',
+            'tag': 'geoip-ru',
+            'format': 'binary',
+            'url': _geoipRuUrl,
+            'download_detour': 'direct',
+          },
+        ]);
+        rules.add({
+          'rule_set': ['geosite-ru', 'geoip-ru'],
+          'outbound': 'direct',
+        });
+      case RoutingMode.custom:
+        if (bypassDomains.isNotEmpty) {
+          rules.add({'domain_suffix': bypassDomains, 'outbound': 'direct'});
+        }
+      case RoutingMode.fullVpn:
+        break;
+    }
+
+    rules.add({'ip_is_private': true, 'outbound': 'direct'});
+
     return {
+      if (ruleSets.isNotEmpty) 'rule_set': ruleSets,
       'rules': rules,
       'final': 'proxy',
       'auto_detect_interface': true,
