@@ -111,16 +111,22 @@ class ConfigBuilder {
         .map((a) => a.trim())
         .toList();
 
+    final peer = <String, dynamic>{
+      'address': c['server'],
+      'port': c['port'],
+      'public_key': c['publicKey'],
+      if ((c['presharedKey'] as String? ?? '').isNotEmpty)
+        'pre_shared_key': c['presharedKey'],
+      'allowed_ips': ['0.0.0.0/0', '::/0'],
+    };
+
     return {
       'type': 'wireguard',
       'tag': 'proxy',
-      'server': c['server'],
-      'server_port': c['port'],
-      'private_key': c['privateKey'],
-      'peer_public_key': c['publicKey'],
-      if ((c['presharedKey'] as String? ?? '').isNotEmpty)
-        'pre_shared_key': c['presharedKey'],
       'local_address': addresses,
+      'private_key': c['privateKey'],
+      'peers': [peer],
+      'mtu': 1408,
     };
   }
 
