@@ -78,9 +78,21 @@ class _WindowsVpnService implements VpnService {
   @override
   Stream<VpnStatus> get statusStream => _controller.stream;
 
-  String get _exePath {
+  String get _binDir {
     final appDir = File(Platform.resolvedExecutable).parent.path;
-    return '$appDir\\data\\flutter_assets\\assets\\bin\\sing-box.exe';
+    return '$appDir\\data\\flutter_assets\\assets\\bin';
+  }
+
+  String get _exePath => '$_binDir\\sing-box.exe';
+
+  // Ensure wintun.dll is in the same directory as sing-box.exe.
+  // sing-box loads it at startup — it must be a sibling of the exe.
+  Future<void> _ensureWintun() async {
+    final src = File('$_binDir\\wintun.dll');
+    final dst = File('${File(_exePath).parent.path}\\wintun.dll');
+    if (src.existsSync() && !dst.existsSync()) {
+      await src.copy(dst.path);
+    }
   }
 
   @override
@@ -96,6 +108,8 @@ class _WindowsVpnService implements VpnService {
           'and place at assets/bin/sing-box.exe, then rebuild.',
         );
       }
+
+      await _ensureWintun();
 
       _configFile = File(
         '${Directory.systemTemp.path}\\vpn_client_${DateTime.now().millisecondsSinceEpoch}.json',
