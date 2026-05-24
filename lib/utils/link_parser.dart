@@ -381,7 +381,7 @@ class LinkParser {
     }
   }
 
-  // ── WireGuard .conf ────────────────────────────────────────────────────────
+  // ── WireGuard / AmneziaWG .conf ──────────────────────────────────────────
 
   static ParseResult _parseWireguardConf(String conf) {
     try {
@@ -408,20 +408,32 @@ class LinkParser {
           ? int.tryParse(endpoint.substring(colon + 1)) ?? 51820
           : 51820;
 
+      // AmneziaWG obfuscation params (Jc, Jmin, Jmax, S1, S2, H1–H4)
+      const awgKeys = {'jc', 'jmin', 'jmax', 's1', 's2', 'h1', 'h2', 'h3', 'h4'};
+      final awgParams = <String, dynamic>{};
+      for (final k in awgKeys) {
+        final v = data['interface_$k'];
+        if (v != null) awgParams[k] = int.tryParse(v) ?? v;
+      }
+      final isAmnezia = awgParams.isNotEmpty;
+
+      final cfg = <String, dynamic>{
+        'privateKey': data['interface_privatekey'] ?? '',
+        'publicKey': data['peer_publickey'] ?? '',
+        'presharedKey': data['peer_presharedkey'] ?? '',
+        'server': server,
+        'port': port,
+        'address': data['interface_address'] ?? '10.0.0.1/32',
+        'dns': data['interface_dns'] ?? '1.1.1.1',
+        'allowedIPs': data['peer_allowedips'] ?? '0.0.0.0/0',
+        ...awgParams,
+      };
+
       return ParseResult.success(VpnProfile(
         id: VpnProfile.generateId(),
-        name: server.isNotEmpty ? server : 'WireGuard',
-        protocol: VpnProtocol.wireguard,
-        config: {
-          'privateKey': data['interface_privatekey'] ?? '',
-          'publicKey': data['peer_publickey'] ?? '',
-          'presharedKey': data['peer_presharedkey'] ?? '',
-          'server': server,
-          'port': port,
-          'address': data['interface_address'] ?? '10.0.0.1/32',
-          'dns': data['interface_dns'] ?? '1.1.1.1',
-          'allowedIPs': data['peer_allowedips'] ?? '0.0.0.0/0',
-        },
+        name: server.isNotEmpty ? server : (isAmnezia ? 'AmneziaWG' : 'WireGuard'),
+        protocol: isAmnezia ? VpnProtocol.amnezia : VpnProtocol.wireguard,
+        config: cfg,
         createdAt: DateTime.now(),
       ));
     } catch (e) {
