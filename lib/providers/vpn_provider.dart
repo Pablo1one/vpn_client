@@ -12,6 +12,7 @@ class VpnProvider extends ChangeNotifier {
   late final VpnService _vpn;
 
   VpnStatus _status = VpnStatus.disconnected;
+  DateTime? _connectedAt;
   VpnProfile? _activeProfile;
   List<VpnProfile> _profiles = [];
   bool _killSwitch = false;
@@ -28,6 +29,7 @@ class VpnProvider extends ChangeNotifier {
   List<String> get bypassDomains => List.from(_bypassDomains);
   List<String> get excludedApps => List.from(_excludedApps);
   String? get error => _error;
+  DateTime? get connectedAt => _connectedAt;
   bool get isConnected => _status == VpnStatus.connected;
   bool get isBusy =>
       _status == VpnStatus.connecting || _status == VpnStatus.disconnecting;
@@ -37,6 +39,11 @@ class VpnProvider extends ChangeNotifier {
       _vpn = VpnService.create();
       _vpn.statusStream.listen((s) {
         _status = s;
+        if (s == VpnStatus.connected) {
+          _connectedAt ??= DateTime.now();
+        } else {
+          _connectedAt = null;
+        }
         if (s != VpnStatus.error) _error = null;
         notifyListeners();
       });
