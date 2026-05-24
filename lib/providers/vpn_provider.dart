@@ -83,16 +83,21 @@ class VpnProvider extends ChangeNotifier {
     _status = VpnStatus.connecting;
     notifyListeners();
     try {
-      final config = ConfigBuilder.build(
-        _activeProfile!,
-        routingMode: _routingMode,
-        killSwitch: _killSwitch,
-        bypassDomains: _bypassDomains,
-      );
-      await _vpn.connect(
-        ConfigBuilder.toJson(config),
-        excludedApps: _excludedApps,
-      );
+      if (_activeProfile!.protocol == VpnProtocol.amnezia && Platform.isWindows) {
+        final conf = ConfigBuilder.buildAwgConf(_activeProfile!);
+        await _vpn.connectAwg(conf);
+      } else {
+        final config = ConfigBuilder.build(
+          _activeProfile!,
+          routingMode: _routingMode,
+          killSwitch: _killSwitch,
+          bypassDomains: _bypassDomains,
+        );
+        await _vpn.connect(
+          ConfigBuilder.toJson(config),
+          excludedApps: _excludedApps,
+        );
+      }
     } catch (e) {
       _status = VpnStatus.error;
       _error = e.toString().replaceFirst('UnimplementedError: ', '');

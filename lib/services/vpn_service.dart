@@ -10,6 +10,7 @@ abstract class VpnService {
   Stream<VpnStatus> get statusStream;
   Future<void> connect(String singboxConfigJson,
       {List<String> excludedApps = const []});
+  Future<void> connectAwg(String confContent);
   Future<void> disconnect();
   void dispose();
 
@@ -57,6 +58,10 @@ class _MobileVpnService implements VpnService {
           'connect', {'config': config, 'excludedApps': excludedApps});
 
   @override
+  Future<void> connectAwg(String confContent) =>
+      throw UnsupportedError('AWG not yet supported on mobile');
+
+  @override
   Future<void> disconnect() => _method.invokeMethod('disconnect');
 
   @override
@@ -77,6 +82,8 @@ class _WindowsVpnService implements VpnService {
   StreamSubscription? _outSub;
   StreamSubscription? _errSub;
   File? _configFile;
+  bool _awgActive = false;
+  static const _awgTunnelName = 'vpnclient_awg';
 
   @override
   Stream<VpnStatus> get statusStream => _controller.stream;
@@ -217,14 +224,69 @@ class _WindowsVpnService implements VpnService {
   }
 
   @override
+  Future<void> connectAwg(String confContent) async {
+    _controller.add(VpnStatus.connecting);
+    try {
+      final awgExe = File('$_binDir\\amneziawg.exe');
+      if (!awgExe.existsSync()) {
+        throw Exception(
+          'amneziawg.exe not found.\n'
+          'Expected: ${awgExe.path}\n'
+          'Download from https://github.com/amnezia-vpn/amneziawg-windows-client/releases',
+        );
+      }
+
+      // Uninstall any leftover tunnel from a previous session.
+      await _uninstallAwgTunnel();
+
+      final confFile = File('${Directory.systemTemp.path}\\$_awgTunnelName.conf');
+      await confFile.writeAsString(confContent);
+
+      final result = await Process.run(
+        awgExe.path,
+        ['/installtunnelservice', confFile.path],
+        runInShell: false,
+      );
+
+      if (result.exitCode != 0) {
+        throw Exception(
+          'amneziawg install failed (code ${result.exitCode}): ${result.stderr}',
+        );
+      }
+
+      // Wait for the tunnel service to establish the WireGuard handshake.
+      await Future.delayed(const Duration(seconds: 3));
+      _awgActive = true;
+      _controller.add(VpnStatus.connected);
+    } catch (e) {
+      _controller.add(VpnStatus.error);
+      rethrow;
+    }
+  }
+
+  Future<void> _uninstallAwgTunnel() async {
+    if (!_awgActive) return;
+    _awgActive = false;
+    final awgExe = '$_binDir\\amneziawg.exe';
+    await Process.run(awgExe, ['/uninstalltunnelservice', _awgTunnelName],
+        runInShell: false);
+    await Future.delayed(const Duration(milliseconds: 500));
+  }
+
+  @override
   Future<void> disconnect() async {
     _controller.add(VpnStatus.disconnecting);
-    await _killExistingProcess();
+    if (_awgActive) {
+      await _uninstallAwgTunnel();
+    } else {
+      await _killExistingProcess();
+    }
     _controller.add(VpnStatus.disconnected);
   }
 
   @override
   void dispose() {
+    if (_awgActive) _uninstallAwgTunnel();
     _process?.kill();
     _controller.close();
   }
