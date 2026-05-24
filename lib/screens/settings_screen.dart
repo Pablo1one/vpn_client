@@ -1,8 +1,10 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../providers/vpn_provider.dart';
 import '../providers/language_provider.dart';
+import '../services/update_service.dart';
 import '../utils/config_builder.dart';
 import '../l10n/strings.dart';
 import '../theme.dart';
@@ -58,6 +60,11 @@ class SettingsScreen extends StatelessWidget {
             ),
             const Divider(height: 1),
           ],
+
+          // ── Updates ──────────────────────────────────────────────────────
+          _SectionHeader(s.updates),
+          const _UpdateTile(),
+          const Divider(height: 1),
 
           // ── Language ─────────────────────────────────────────────────────
           _SectionHeader(s.language),
@@ -409,6 +416,89 @@ class _AppPickerSheetState extends State<_AppPickerSheet> {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ── Update tile ───────────────────────────────────────────────────────────────
+
+enum _UpdateState { idle, checking, upToDate, available }
+
+class _UpdateTile extends StatefulWidget {
+  const _UpdateTile();
+
+  @override
+  State<_UpdateTile> createState() => _UpdateTileState();
+}
+
+class _UpdateTileState extends State<_UpdateTile> {
+  final _svc = UpdateService();
+  _UpdateState _state = _UpdateState.idle;
+  UpdateInfo? _info;
+  String _currentVersion = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _svc.currentVersion().then((v) {
+      if (mounted) setState(() => _currentVersion = v);
+    });
+  }
+
+  Future<void> _check() async {
+    setState(() => _state = _UpdateState.checking);
+    final info = await _svc.check();
+    if (!mounted) return;
+    setState(() {
+      _info = info;
+      _state = info != null ? _UpdateState.available : _UpdateState.upToDate;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = L10n.of(context);
+    final sub = switch (_state) {
+      _UpdateState.checking => s.checkingForUpdates,
+      _UpdateState.upToDate => s.upToDate,
+      _UpdateState.available => '${s.updateAvailable}: v${_info!.version}',
+      _UpdateState.idle => _currentVersion.isNotEmpty
+          ? '${s.version} $_currentVersion'
+          : '',
+    };
+
+    return ListTile(
+      title: Text(s.checkForUpdates),
+      subtitle: sub.isNotEmpty
+          ? Text(sub,
+              style: TextStyle(
+                fontSize: 12,
+                color: _state == _UpdateState.available
+                    ? AppTheme.cyan
+                    : const Color(0xFF5A6480),
+              ))
+          : null,
+      trailing: _state == _UpdateState.checking
+          ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: AppTheme.cyan),
+            )
+          : _state == _UpdateState.available
+              ? FilledButton.tonal(
+                  onPressed: () => launchUrl(Uri.parse(_info!.downloadUrl),
+                      mode: LaunchMode.externalApplication),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppTheme.cyan.withOpacity(0.15),
+                    foregroundColor: AppTheme.cyan,
+                  ),
+                  child: Text(s.download),
+                )
+              : TextButton(
+                  onPressed: _state == _UpdateState.checking ? null : _check,
+                  child: Text(s.checkForUpdates),
+                ),
     );
   }
 }

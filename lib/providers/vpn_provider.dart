@@ -4,12 +4,14 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/profile.dart';
 import '../services/profile_repository.dart';
+import '../services/speed_service.dart';
 import '../services/vpn_service.dart';
 import '../utils/config_builder.dart';
 
 class VpnProvider extends ChangeNotifier {
   final _repo = ProfileRepository();
   late final VpnService _vpn;
+  final _speed = SpeedService();
 
   VpnStatus _status = VpnStatus.disconnected;
   DateTime? _connectedAt;
@@ -31,6 +33,7 @@ class VpnProvider extends ChangeNotifier {
   String? get error => _error;
   DateTime? get connectedAt => _connectedAt;
   bool get isConnected => _status == VpnStatus.connected;
+  Stream<SpeedData> get speedStream => _speed.stream;
   bool get isBusy =>
       _status == VpnStatus.connecting || _status == VpnStatus.disconnecting;
 
@@ -41,8 +44,10 @@ class VpnProvider extends ChangeNotifier {
         _status = s;
         if (s == VpnStatus.connected) {
           _connectedAt ??= DateTime.now();
+          _speed.start();
         } else {
           _connectedAt = null;
+          _speed.stop();
         }
         if (s != VpnStatus.error) _error = null;
         notifyListeners();
@@ -180,6 +185,7 @@ class VpnProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _speed.dispose();
     _vpn.dispose();
     super.dispose();
   }

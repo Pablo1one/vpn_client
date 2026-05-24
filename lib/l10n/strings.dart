@@ -41,6 +41,13 @@ class L10n {
   final String delete;
   final String unrecognizedFormat;
   final String searchApps;
+  final String updates;
+  final String version;
+  final String checkForUpdates;
+  final String checkingForUpdates;
+  final String upToDate;
+  final String updateAvailable;
+  final String download;
 
   const L10n._({
     required this.appName,
@@ -81,6 +88,13 @@ class L10n {
     required this.delete,
     required this.unrecognizedFormat,
     required this.searchApps,
+    required this.updates,
+    required this.version,
+    required this.checkForUpdates,
+    required this.checkingForUpdates,
+    required this.upToDate,
+    required this.updateAvailable,
+    required this.download,
   }) : _foundProfiles = foundProfiles;
 
   String foundProfiles(int n) => _foundProfiles.replaceAll('{n}', '$n');
@@ -131,6 +145,13 @@ class L10n {
     unrecognizedFormat:
         'Unrecognized format.\nSupported: vless://, tuic://, hysteria2://, vpn:// (Amnezia), WireGuard .conf, subscription URL',
     searchApps: 'Search apps…',
+    updates: 'Updates',
+    version: 'Version',
+    checkForUpdates: 'Check for updates',
+    checkingForUpdates: 'Checking…',
+    upToDate: 'Up to date',
+    updateAvailable: 'Update available',
+    download: 'Download',
   );
 
   static const ru = L10n._(
@@ -174,5 +195,12 @@ class L10n {
     unrecognizedFormat:
         'Неизвестный формат.\nПоддерживается: vless://, tuic://, hysteria2://, vpn:// (Amnezia), WireGuard .conf, URL подписки',
     searchApps: 'Поиск приложений…',
+    updates: 'Обновления',
+    version: 'Версия',
+    checkForUpdates: 'Проверить обновления',
+    checkingForUpdates: 'Проверка…',
+    upToDate: 'Установлена последняя версия',
+    updateAvailable: 'Доступно обновление',
+    download: 'Скачать',
   );
 }

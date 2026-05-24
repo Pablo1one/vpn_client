@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/vpn_provider.dart';
 import '../providers/language_provider.dart';
+import '../services/speed_service.dart';
 import '../services/vpn_service.dart';
 import '../utils/config_builder.dart';
 import '../l10n/strings.dart';
@@ -36,7 +37,9 @@ class HomeScreen extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             _ConnectionTimer(connectedAt: vpn.connectedAt),
-            const SizedBox(height: 20),
+            const SizedBox(height: 12),
+            _SpeedWidget(stream: vpn.speedStream, visible: vpn.isConnected),
+            const SizedBox(height: 12),
             _ProfileLabel(name: vpn.activeProfile?.name),
             const SizedBox(height: 6),
             if (vpn.activeProfile != null)
@@ -229,6 +232,87 @@ class _ConnectionTimer extends StatelessWidget {
       },
     );
   }
+}
+
+// ── Speed / ping widget ───────────────────────────────────────────────────────
+
+class _SpeedWidget extends StatelessWidget {
+  final Stream<SpeedData> stream;
+  final bool visible;
+  const _SpeedWidget({required this.stream, required this.visible});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!visible) return const SizedBox(height: 24);
+    return StreamBuilder<SpeedData>(
+      stream: stream,
+      builder: (_, snap) {
+        final data = snap.data ?? SpeedData.empty;
+        return AnimatedOpacity(
+          opacity: visible ? 1 : 0,
+          duration: const Duration(milliseconds: 400),
+          child: Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppTheme.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF1E1E38)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _Stat(
+                  icon: Icons.arrow_upward_rounded,
+                  value: SpeedService.formatSpeed(data.uploadBps),
+                  color: const Color(0xFFFFB300),
+                ),
+                const SizedBox(width: 20),
+                _Stat(
+                  icon: Icons.arrow_downward_rounded,
+                  value: SpeedService.formatSpeed(data.downloadBps),
+                  color: AppTheme.cyan,
+                ),
+                if (data.pingMs >= 0) ...[
+                  const SizedBox(width: 20),
+                  _Stat(
+                    icon: Icons.network_ping_rounded,
+                    value: '${data.pingMs} ms',
+                    color: AppTheme.purple,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _Stat extends StatelessWidget {
+  final IconData icon;
+  final String value;
+  final Color color;
+  const _Stat({required this.icon, required this.value, required this.color});
+
+  @override
+  Widget build(BuildContext context) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: color.withOpacity(0.85)),
+          const SizedBox(width: 4),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 13,
+              color: color,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ],
+      );
 }
 
 // ── Routing mode badge ────────────────────────────────────────────────────────
