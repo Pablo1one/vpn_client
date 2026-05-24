@@ -41,6 +41,7 @@ class L10n {
   final String delete;
   final String unrecognizedFormat;
   final String searchApps;
+  final String openFile;
   final String updates;
   final String version;
   final String checkForUpdates;
@@ -88,6 +89,7 @@ class L10n {
     required this.delete,
     required this.unrecognizedFormat,
     required this.searchApps,
+    required this.openFile,
     required this.updates,
     required this.version,
     required this.checkForUpdates,
@@ -145,6 +147,7 @@ class L10n {
     unrecognizedFormat:
         'Unrecognized format.\nSupported: vless://, tuic://, hysteria2://, vpn:// (Amnezia), WireGuard .conf, subscription URL',
     searchApps: 'Search apps…',
+    openFile: 'Open .conf file',
     updates: 'Updates',
     version: 'Version',
     checkForUpdates: 'Check for updates',
@@ -195,6 +198,7 @@ class L10n {
     unrecognizedFormat:
         'Неизвестный формат.\nПоддерживается: vless://, tuic://, hysteria2://, vpn:// (Amnezia), WireGuard .conf, URL подписки',
     searchApps: 'Поиск приложений…',
+    openFile: 'Открыть .conf файл',
     updates: 'Обновления',
     version: 'Версия',
     checkForUpdates: 'Проверить обновления',
