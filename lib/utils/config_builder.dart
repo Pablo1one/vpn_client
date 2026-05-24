@@ -5,9 +5,9 @@ enum RoutingMode { fullVpn, russiaBypass, custom }
 
 class ConfigBuilder {
   static const _geositeRuUrl =
-      'https://github.com/SagerNet/sing-geosite/releases/latest/download/geosite-ru.srs';
+      'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/geolocation-ru.srs';
   static const _geoipRuUrl =
-      'https://github.com/SagerNet/sing-geoip/releases/latest/download/geoip-ru.srs';
+      'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/ru.srs';
 
   static Map<String, dynamic> build(
     VpnProfile profile, {
@@ -122,16 +122,9 @@ class ConfigBuilder {
   }
 
   static Map<String, dynamic> _amnezia(Map<String, dynamic> c) {
-    final base = _wireguard(c);
-    // AmneziaWG obfuscation params (supported in patched sing-box builds)
-    final amneziaFields = <String, dynamic>{};
-    for (final k in ['jc', 'jmin', 'jmax', 's1', 's2', 'h1', 'h2', 'h3', 'h4']) {
-      if (c.containsKey(k)) amneziaFields[k] = c[k];
-    }
-    if (amneziaFields.isNotEmpty) {
-      return {...base, 'amnezia': amneziaFields};
-    }
-    return base;
+    // Standard sing-box doesn't support AmneziaWG obfuscation fields.
+    // Fall back to plain WireGuard — the tunnel will still work without obfuscation.
+    return _wireguard(c);
   }
 
   static Map<String, dynamic> _tuic(Map<String, dynamic> c) => {
