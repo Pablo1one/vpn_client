@@ -255,7 +255,7 @@ class _WindowsVpnService implements VpnService {
       }
 
       // Wait for the tunnel service to establish the WireGuard handshake.
-      await Future.delayed(const Duration(seconds: 3));
+      await Future.delayed(const Duration(seconds: 5));
       _awgActive = true;
       _controller.add(VpnStatus.connected);
     } catch (e) {
