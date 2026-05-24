@@ -11,9 +11,10 @@ class ConfigBuilder {
     List<String> bypassDomains = const [],
     bool killSwitch = false,
   }) {
+    final ruMode = routingMode == RoutingMode.russiaBypass;
     return {
       'log': {'level': 'info'},
-      'dns': _dns(),
+      'dns': _dns(russiaBypass: ruMode),
       'experimental': {
         'clash_api': {
           'external_controller': '127.0.0.1:9090',
@@ -43,10 +44,16 @@ class ConfigBuilder {
     final c = profile.config;
     final buf = StringBuffer();
 
+    // Prefer values from the original imported .conf so we don't break
+    // setups where DNS points to the server's internal gateway IP.
+    final dns = c['dns'] as String? ?? '1.1.1.1';
+    final allowedIPs = c['allowedIPs'] as String? ?? '0.0.0.0/0, ::/0';
+
     buf.writeln('[Interface]');
     buf.writeln('PrivateKey = ${c['privateKey']}');
     buf.writeln('Address = ${c['address']}');
-    buf.writeln('DNS = 1.1.1.1, 8.8.8.8');
+    buf.writeln('DNS = $dns');
+    buf.writeln('MTU = 1380');
 
     const awgParamKeys = [
       'Jc', 'Jmin', 'Jmax', 'S1', 'S2', 'S3', 'S4',
@@ -63,7 +70,7 @@ class ConfigBuilder {
     final psk = c['presharedKey'] as String? ?? '';
     if (psk.isNotEmpty) buf.writeln('PresharedKey = $psk');
     buf.writeln('Endpoint = ${c['server']}:${c['port']}');
-    buf.writeln('AllowedIPs = 0.0.0.0/0, ::/0');
+    buf.writeln('AllowedIPs = $allowedIPs');
     buf.writeln('PersistentKeepalive = 25');
 
     return buf.toString();
@@ -215,17 +222,25 @@ class ConfigBuilder {
         'strict_route': true,
         'stack': 'mixed',
         'sniff': true,
+        'sniff_override_destination': true,
       };
 
   // ── DNS ─────────────────────────────────────────────────────────────────────
 
-  static Map<String, dynamic> _dns() => {
+  static Map<String, dynamic> _dns({bool russiaBypass = false}) => {
         'servers': [
           {'tag': 'remote', 'address': 'tls://1.1.1.1', 'detour': 'proxy'},
           {'tag': 'local', 'address': 'https://8.8.8.8/dns-query', 'detour': 'direct'},
         ],
         'rules': [
           {'outbound': 'any', 'server': 'local'},
+          if (russiaBypass) {
+            'domain_suffix': [
+              '.ru', '.рф', '.su',
+              'yandex.com', 'yandex.net', 'ya.ru', 'yastatic.net',
+            ],
+            'server': 'local',
+          },
         ],
         'final': 'remote',
         'independent_cache': true,
