@@ -4,10 +4,6 @@ import '../models/profile.dart';
 enum RoutingMode { fullVpn, russiaBypass, custom }
 
 class ConfigBuilder {
-  static const _geositeRuUrl =
-      'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/geolocation-ru.srs';
-  static const _geoipRuUrl =
-      'https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/ru.srs';
 
   static Map<String, dynamic> build(
     VpnProfile profile, {
@@ -15,10 +11,15 @@ class ConfigBuilder {
     List<String> bypassDomains = const [],
     bool killSwitch = false,
   }) {
-    final ruMode = routingMode == RoutingMode.russiaBypass;
     return {
-      'log': {'level': 'warn'},
-      'dns': _dns(russiaBypass: ruMode),
+      'log': {'level': 'info'},
+      'dns': _dns(),
+      'experimental': {
+        'clash_api': {
+          'external_controller': '127.0.0.1:9090',
+          'secret': '',
+        },
+      },
       'inbounds': [_tun()],
       'outbounds': [
         _outbound(profile),
@@ -64,12 +65,14 @@ class ConfigBuilder {
       };
     }
 
+    final flow = (c['flow'] as String? ?? '').trim();
     final out = <String, dynamic>{
       'type': 'vless',
       'tag': 'proxy',
       'server': c['server'],
       'server_port': c['port'],
       'uuid': c['uuid'],
+      if (flow.isNotEmpty) 'flow': flow,
       'tls': tls,
     };
 
@@ -169,28 +172,26 @@ class ConfigBuilder {
         'type': 'tun',
         'tag': 'tun-in',
         'interface_name': 'tun0',
-        // sing-box 1.10+: inet4_address/inet6_address merged into address[]
         'address': ['172.19.0.1/30', 'fdfe:dcba:9876::1/126'],
         'mtu': 9000,
         'auto_route': true,
         'strict_route': true,
-        'stack': 'system',
+        'stack': 'mixed',
         'sniff': true,
-        'sniff_override_destination': true,
       };
 
   // ── DNS ─────────────────────────────────────────────────────────────────────
 
-  static Map<String, dynamic> _dns({bool russiaBypass = false}) => {
+  static Map<String, dynamic> _dns() => {
         'servers': [
           {'tag': 'remote', 'address': 'tls://1.1.1.1', 'detour': 'proxy'},
-          {'tag': 'local', 'address': 'tls://8.8.8.8', 'detour': 'direct'},
+          {'tag': 'local', 'address': 'https://8.8.8.8/dns-query', 'detour': 'direct'},
         ],
         'rules': [
           {'outbound': 'any', 'server': 'local'},
-          if (russiaBypass) {'rule_set': ['geosite-ru'], 'server': 'local'},
         ],
         'final': 'remote',
+        'independent_cache': true,
       };
 
   // ── Route ────────────────────────────────────────────────────────────────────
@@ -200,33 +201,15 @@ class ConfigBuilder {
     required List<String> bypassDomains,
     required bool killSwitch,
   }) {
-    final ruleSets = <Map<String, dynamic>>[];
     final rules = <Map<String, dynamic>>[
       {'protocol': 'dns', 'outbound': 'dns-out'},
     ];
 
     switch (routingMode) {
       case RoutingMode.russiaBypass:
-        ruleSets.addAll([
-          {
-            'type': 'remote',
-            'tag': 'geosite-ru',
-            'format': 'binary',
-            'url': _geositeRuUrl,
-            'download_detour': 'direct',
-          },
-          {
-            'type': 'remote',
-            'tag': 'geoip-ru',
-            'format': 'binary',
-            'url': _geoipRuUrl,
-            'download_detour': 'direct',
-          },
-        ]);
-        rules.add({
-          'rule_set': ['geosite-ru', 'geoip-ru'],
-          'outbound': 'direct',
-        });
+        // Route .ru / .рф / .su domains directly, no remote rule-set download needed
+        rules.add({'domain_suffix': ['.ru', '.рф', '.su'], 'outbound': 'direct'});
+        rules.add({'domain': ['yandex.com', 'yandex.net', 'ya.ru'], 'outbound': 'direct'});
       case RoutingMode.custom:
         if (bypassDomains.isNotEmpty) {
           rules.add({'domain_suffix': bypassDomains, 'outbound': 'direct'});
@@ -238,7 +221,6 @@ class ConfigBuilder {
     rules.add({'ip_is_private': true, 'outbound': 'direct'});
 
     return {
-      if (ruleSets.isNotEmpty) 'rule_set': ruleSets,
       'rules': rules,
       'final': 'proxy',
       'auto_detect_interface': true,
