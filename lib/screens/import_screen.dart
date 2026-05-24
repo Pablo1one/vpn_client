@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -77,6 +79,26 @@ class _ImportScreenState extends State<ImportScreen> {
     }
   }
 
+  Future<void> _pickFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['conf'],
+      allowMultiple: false,
+    );
+    if (result == null || result.files.isEmpty) return;
+
+    final path = result.files.first.path;
+    if (path == null) return;
+
+    try {
+      final content = await File(path).readAsString();
+      _ctrl.text = content;
+      _onChanged(content);
+    } catch (e) {
+      setState(() => _error = 'Ошибка чтения файла: $e');
+    }
+  }
+
   Future<void> _import() async {
     final vpn = context.read<VpnProvider>();
     if (_batch != null) {
@@ -111,11 +133,22 @@ class _ImportScreenState extends State<ImportScreen> {
                 hintText: s.importHint,
                 hintStyle:
                     const TextStyle(fontSize: 12, color: Color(0xFF3A4060)),
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.content_paste_rounded,
-                      color: AppTheme.cyan),
-                  tooltip: s.pasteBtn,
-                  onPressed: _paste,
+                suffixIcon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.content_paste_rounded,
+                          color: AppTheme.cyan),
+                      tooltip: s.pasteBtn,
+                      onPressed: _paste,
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.folder_open_outlined,
+                          color: AppTheme.cyan),
+                      tooltip: s.openFile,
+                      onPressed: _pickFile,
+                    ),
+                  ],
                 ),
               ),
               onChanged: _onChanged,
