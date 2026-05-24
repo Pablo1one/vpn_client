@@ -1,0 +1,38 @@
+# Flutter/Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+*.g.dart
+*.freezed.dart
+pubspec.lock
+
+# Android
+android/local.properties
+android/.gradle/
+android/captures/
+android/key.properties
+
+# iOS
+ios/Flutter/
+ios/.symlinks/
+ios/Pods/
+ios/Runner/GeneratedPluginRegistrant.*
+
+# Windows
+windows/flutter/
+
+# macOS
+macos/Flutter/
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Sensitive
+.env
+*.env
+singbox/
