@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/vpn_provider.dart';
+import '../providers/language_provider.dart';
 import '../models/profile.dart';
+import '../l10n/strings.dart';
+import '../theme.dart';
 import 'import_screen.dart';
 
 class ProfilesScreen extends StatelessWidget {
@@ -10,24 +13,27 @@ class ProfilesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final vpn = context.watch<VpnProvider>();
+    context.watch<LanguageProvider>();
+    final s = L10n.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Profiles')),
+      appBar: AppBar(title: Text(s.profilesTab)),
       body: vpn.profiles.isEmpty
           ? Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.list_alt_outlined,
-                      size: 64, color: Colors.grey.shade700),
+                      size: 64, color: const Color(0xFF2A3A4A)),
                   const SizedBox(height: 16),
-                  Text('No profiles yet',
-                      style: TextStyle(color: Colors.grey.shade600)),
+                  Text(s.noProfiles,
+                      style:
+                          const TextStyle(color: Color(0xFF3A4A5A))),
                   const SizedBox(height: 24),
                   FilledButton.icon(
                     onPressed: () => _openImport(context),
                     icon: const Icon(Icons.add),
-                    label: const Text('Import profile'),
+                    label: Text(s.importProfile),
                   ),
                 ],
               ),
@@ -43,7 +49,7 @@ class ProfilesScreen extends StatelessWidget {
                   profile: p,
                   isActive: isActive,
                   onTap: () => vpn.selectProfile(p),
-                  onDelete: () => _confirmDelete(context, vpn, p),
+                  onDelete: () => _confirmDelete(context, vpn, p, s),
                 );
               },
             ),
@@ -52,7 +58,7 @@ class ProfilesScreen extends StatelessWidget {
           : FloatingActionButton.extended(
               onPressed: () => _openImport(context),
               icon: const Icon(Icons.add),
-              label: const Text('Import'),
+              label: Text(s.importProfile),
             ),
     );
   }
@@ -63,19 +69,19 @@ class ProfilesScreen extends StatelessWidget {
       );
 
   Future<void> _confirmDelete(
-      BuildContext context, VpnProvider vpn, VpnProfile p) async {
+      BuildContext context, VpnProvider vpn, VpnProfile p, L10n s) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Delete profile?'),
+        title: Text(s.deleteProfile),
         content: Text(p.name),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
+              child: Text(s.cancel)),
           FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Delete')),
+              child: Text(s.delete)),
         ],
       ),
     );
@@ -102,32 +108,33 @@ class _ProfileTile extends StatelessWidget {
 
     return Card(
       color: isActive
-          ? colors.primaryContainer.withOpacity(0.15)
-          : const Color(0xFF1C1C1C),
+          ? AppTheme.cyan.withOpacity(0.07)
+          : AppTheme.card,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: isActive
-            ? BorderSide(color: colors.primary.withOpacity(0.4))
-            : BorderSide.none,
+            ? BorderSide(color: AppTheme.cyan.withOpacity(0.35))
+            : const BorderSide(color: Color(0xFF1E1E38)),
       ),
       child: ListTile(
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         leading: CircleAvatar(
           backgroundColor: isActive
-              ? colors.primary.withOpacity(0.2)
-              : Colors.grey.shade800,
+              ? AppTheme.cyan.withOpacity(0.15)
+              : const Color(0xFF1A1A2E),
           child: Icon(
             _icon(profile.protocol),
             size: 20,
-            color: isActive ? colors.primary : Colors.grey,
+            color: isActive ? AppTheme.cyan : const Color(0xFF3A4A5A),
           ),
         ),
         title: Text(profile.name,
             style: const TextStyle(fontWeight: FontWeight.w500)),
         subtitle: Text(
           '${profile.protocolLabel}  •  ${profile.serverHost}',
-          style: const TextStyle(fontSize: 12, color: Colors.grey),
+          style:
+              const TextStyle(fontSize: 12, color: Color(0xFF4A5A6A)),
           overflow: TextOverflow.ellipsis,
         ),
         trailing: Row(
@@ -137,11 +144,11 @@ class _ProfileTile extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(right: 4),
                 child: Icon(Icons.check_circle_rounded,
-                    color: colors.primary, size: 18),
+                    color: AppTheme.cyan, size: 18),
               ),
             IconButton(
               icon: const Icon(Icons.delete_outline,
-                  size: 20, color: Colors.grey),
+                  size: 20, color: Color(0xFF3A4A5A)),
               onPressed: onDelete,
             ),
           ],
@@ -156,5 +163,6 @@ class _ProfileTile extends StatelessWidget {
         VpnProtocol.wireguard => Icons.vpn_lock_rounded,
         VpnProtocol.tuic => Icons.bolt_rounded,
         VpnProtocol.hysteria2 => Icons.speed_rounded,
+        VpnProtocol.amnezia => Icons.shield_rounded,
       };
 }

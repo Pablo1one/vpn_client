@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/vpn_provider.dart';
+import 'providers/language_provider.dart';
 import 'screens/home_screen.dart';
 import 'screens/profiles_screen.dart';
 import 'screens/settings_screen.dart';
+import 'l10n/strings.dart';
 import 'theme.dart';
 
 class App extends StatelessWidget {
@@ -11,13 +13,19 @@ class App extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => VpnProvider()..init(),
-      child: MaterialApp(
-        title: 'VPN Client',
-        theme: AppTheme.dark(),
-        debugShowCheckedModeBanner: false,
-        home: const _Shell(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => VpnProvider()..init()),
+        ChangeNotifierProvider(create: (_) => LanguageProvider()..load()),
+      ],
+      child: Consumer<LanguageProvider>(
+        builder: (_, lang, __) => MaterialApp(
+          title: 'VPN Client',
+          theme: AppTheme.dark(),
+          locale: lang.locale,
+          debugShowCheckedModeBanner: false,
+          home: const _Shell(),
+        ),
       ),
     );
   }
@@ -41,26 +49,27 @@ class _ShellState extends State<_Shell> {
 
   @override
   Widget build(BuildContext context) {
+    final s = L10n.of(context);
     return Scaffold(
       body: IndexedStack(index: _index, children: _screens),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
-        destinations: const [
+        destinations: [
           NavigationDestination(
-            icon: Icon(Icons.vpn_lock_outlined),
-            selectedIcon: Icon(Icons.vpn_lock_rounded),
-            label: 'VPN',
+            icon: const Icon(Icons.vpn_lock_outlined),
+            selectedIcon: const Icon(Icons.vpn_lock_rounded),
+            label: s.vpnTab,
           ),
           NavigationDestination(
-            icon: Icon(Icons.list_alt_outlined),
-            selectedIcon: Icon(Icons.list_alt_rounded),
-            label: 'Profiles',
+            icon: const Icon(Icons.list_alt_outlined),
+            selectedIcon: const Icon(Icons.list_alt_rounded),
+            label: s.profilesTab,
           ),
           NavigationDestination(
-            icon: Icon(Icons.tune_outlined),
-            selectedIcon: Icon(Icons.tune_rounded),
-            label: 'Settings',
+            icon: const Icon(Icons.tune_outlined),
+            selectedIcon: const Icon(Icons.tune_rounded),
+            label: s.settingsTab,
           ),
         ],
       ),
