@@ -48,16 +48,38 @@ class LinkParser {
 
   static Future<ParseResult> parseSubscriptionUrl(String url) async {
     try {
-      final response = await http
-          .get(Uri.parse(url.trim()))
-          .timeout(const Duration(seconds: 15));
+      final uri = _normalizeSubscriptionUri(url.trim());
+
+      final response = await http.get(uri, headers: {
+        'User-Agent': 'Hiddify/2.0.5+462',
+        'Accept': 'application/json, text/plain, */*',
+      }).timeout(const Duration(seconds: 15));
+
       if (response.statusCode != 200) {
         return ParseResult.failure('HTTP ${response.statusCode}');
       }
-      String content = response.body.trim();
-      // Try base64 decode (standard V2Ray/Hiddify subscription format)
+
+      final body = response.body.trim();
+
+      // Reject HTML pages (e.g. Hiddify web UI returned due to ?home=true)
+      if (body.startsWith('<!') || body.startsWith('<html')) {
+        return ParseResult.failure(
+            'Сервер вернул HTML-страницу вместо подписки.\n'
+            'Убедитесь, что URL — ссылка на подписку, а не на веб-панель.');
+      }
+
+      // 1. Try JSON (Hiddify JSON with "configs", or sing-box JSON with "outbounds")
       try {
-        final decoded = utf8.decode(base64.decode(base64.normalize(content)));
+        final json = jsonDecode(body);
+        final profiles = _parseJsonSubscription(json);
+        if (profiles.isNotEmpty) return ParseResult.batch(profiles);
+      } catch (_) {}
+
+      // 2. Try base64 decode → line-by-line URIs
+      String content = body;
+      try {
+        final decoded =
+            utf8.decode(base64.decode(base64.normalize(content)));
         if (decoded.contains('://') || decoded.contains('[Interface]')) {
           content = decoded;
         }
@@ -81,6 +103,116 @@ class LinkParser {
       return ParseResult.batch(profiles);
     } catch (e) {
       return ParseResult.failure('Fetch error: $e');
+    }
+  }
+
+  /// Removes Hiddify web-UI query params (?home=true, ?base64=...) that
+  /// cause the server to return an HTML page instead of subscription content.
+  static Uri _normalizeSubscriptionUri(String url) {
+    final uri = Uri.parse(url);
+    final paramsToRemove = {'home', 'base64', 'clash', 'singbox'};
+    final cleaned = Map<String, String>.from(uri.queryParameters)
+      ..removeWhere((k, _) => paramsToRemove.contains(k.toLowerCase()));
+    return uri.replace(queryParameters: cleaned.isEmpty ? null : cleaned);
+  }
+
+  /// Parses Hiddify JSON (`configs` array) or sing-box JSON (`outbounds` array).
+  static List<VpnProfile> _parseJsonSubscription(dynamic json) {
+    final profiles = <VpnProfile>[];
+
+    List<dynamic>? items;
+    if (json is Map) {
+      items = (json['configs'] ?? json['outbounds']) as List<dynamic>?;
+    } else if (json is List) {
+      items = json;
+    }
+    if (items == null) return profiles;
+
+    for (final item in items) {
+      if (item is! Map) continue;
+      final p = _profileFromJsonOutbound(item);
+      if (p != null) profiles.add(p);
+    }
+    return profiles;
+  }
+
+  static VpnProfile? _profileFromJsonOutbound(Map item) {
+    final type = (item['type'] as String? ?? '').toLowerCase();
+    final name = (item['tag'] ?? item['name'] ?? item['type'] ?? 'profile')
+        as String;
+    final server = (item['server'] as String?) ?? '';
+    final port = (item['server_port'] ?? item['port'] ?? 0) as int;
+
+    try {
+      switch (type) {
+        case 'vless':
+          final tls = item['tls'] as Map? ?? {};
+          final transport = item['transport'] as Map? ?? {};
+          final transportType = (transport['type'] as String? ?? 'tcp');
+          return VpnProfile(
+            id: VpnProfile.generateId(),
+            name: name,
+            protocol: VpnProtocol.vless,
+            config: {
+              'uuid': item['uuid'] ?? '',
+              'server': server,
+              'port': port,
+              'security': tls['enabled'] == true ? 'tls' : 'none',
+              'transport': transportType,
+              'sni': tls['server_name'] ?? server,
+              'fp': (tls['utls'] as Map?)?['fingerprint'] ?? 'chrome',
+              'pbk': (tls['reality'] as Map?)?['public_key'] ?? '',
+              'sid': (tls['reality'] as Map?)?['short_id'] ?? '',
+              'flow': item['flow'] ?? '',
+              'path': transport['path'] ?? '/',
+              'host': (transport['headers'] as Map?)?['Host'] ?? server,
+              if (transportType == 'grpc')
+                'serviceName': transport['service_name'] ?? '',
+            },
+            createdAt: DateTime.now(),
+          );
+        case 'tuic':
+          final tls = item['tls'] as Map? ?? {};
+          return VpnProfile(
+            id: VpnProfile.generateId(),
+            name: name,
+            protocol: VpnProtocol.tuic,
+            config: {
+              'uuid': item['uuid'] ?? '',
+              'password': item['password'] ?? '',
+              'server': server,
+              'port': port,
+              'sni': tls['server_name'] ?? server,
+              'alpn': ((tls['alpn'] as List?)?.first ?? 'h3').toString(),
+              'congestion': item['congestion_control'] ?? 'bbr',
+              'insecure': tls['insecure'] ?? false,
+            },
+            createdAt: DateTime.now(),
+          );
+        case 'hysteria2':
+        case 'hysteria':
+          final tls = item['tls'] as Map? ?? {};
+          final obfs = item['obfs'] as Map? ?? {};
+          return VpnProfile(
+            id: VpnProfile.generateId(),
+            name: name,
+            protocol: VpnProtocol.hysteria2,
+            config: {
+              'password': item['password'] ?? '',
+              'server': server,
+              'port': port,
+              'sni': tls['server_name'] ?? server,
+              'insecure': tls['insecure'] ?? false,
+              'obfs': obfs['type'] ?? '',
+              'obfsPassword': (obfs['salamander'] as Map?)?['password'] ?? '',
+            },
+            createdAt: DateTime.now(),
+          );
+        default:
+          return null;
+      }
+    } catch (_) {
+      return null;
     }
   }
 
