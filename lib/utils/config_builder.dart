@@ -1,20 +1,14 @@
 import 'dart:convert';
-import 'dart:io';
 import '../models/profile.dart';
-import 'xray_config_builder.dart';
 
 enum RoutingMode { fullVpn, russiaBypass, custom }
 
 class ConfigBuilder {
-  // xray is only used for VLESS xhttp transport on Windows.
-  // Other VLESS transports (reality, ws, grpc, http) use sing-box's own outbound
-  // which is WFP-excluded and can reach the server without looping through TUN.
-  // xhttp is Xray-specific and is not supported in any sing-box version.
-  static bool _useXray(VpnProfile p) =>
-      Platform.isWindows &&
-      p.protocol == VpnProtocol.vless &&
-      (p.config['transport'] as String? ?? '') == 'xhttp';
+  /// HTTP proxy port used when running in no-TUN proxy mode (TUIC/Hysteria2).
+  static const int httpProxyPort = 7890;
 
+  /// TUN mode — for VLESS reality/ws/grpc/http and WireGuard.
+  /// sing-box handles all routing; its process is WFP-excluded on Windows.
   static Map<String, dynamic> build(
     VpnProfile profile, {
     RoutingMode routingMode = RoutingMode.fullVpn,
@@ -23,7 +17,6 @@ class ConfigBuilder {
     List<String> tunExcludeAddresses = const [],
   }) {
     final ruMode = routingMode == RoutingMode.russiaBypass;
-    final useXray = _useXray(profile);
     return {
       'log': {'level': 'info'},
       'dns': _dns(russiaBypass: ruMode),
@@ -35,10 +28,7 @@ class ConfigBuilder {
       },
       'inbounds': [_tun(excludeIps: tunExcludeAddresses)],
       'outbounds': [
-        if (useXray)
-          _socks5Proxy()
-        else
-          _outbound(profile),
+        _outbound(profile),
         {'type': 'direct', 'tag': 'direct'},
         {'type': 'block', 'tag': 'block'},
         {'type': 'dns', 'tag': 'dns-out'},
@@ -109,15 +99,31 @@ class ConfigBuilder {
     return buf.toString();
   }
 
-  // ── Outbound ────────────────────────────────────────────────────────────────
-
-  static Map<String, dynamic> _socks5Proxy() => {
-        'type': 'socks',
-        'tag': 'proxy',
-        'server': '127.0.0.1',
-        'server_port': XrayConfigBuilder.socks5Port,
-        'version': '5',
+  /// Proxy mode — for TUIC/Hysteria2 on Windows.
+  /// No TUN: sing-box listens on localhost HTTP port, caller sets system proxy.
+  static Map<String, dynamic> buildProxyMode(VpnProfile profile) => {
+        'log': {'level': 'info'},
+        'inbounds': [
+          {
+            'type': 'http',
+            'tag': 'http-in',
+            'listen': '127.0.0.1',
+            'listen_port': httpProxyPort,
+          },
+        ],
+        'outbounds': [
+          _outbound(profile),
+          {'type': 'direct', 'tag': 'direct'},
+        ],
+        'route': {
+          'rules': [
+            {'ip_is_private': true, 'outbound': 'direct'},
+          ],
+          'final': 'proxy',
+        },
       };
+
+  // ── Outbound ────────────────────────────────────────────────────────────────
 
   static Map<String, dynamic> _outbound(VpnProfile p) => switch (p.protocol) {
         VpnProtocol.vless => _vless(p.config),

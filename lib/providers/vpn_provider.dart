@@ -9,6 +9,10 @@ import '../services/vpn_service.dart';
 import '../utils/config_builder.dart';
 import '../utils/xray_config_builder.dart';
 
+bool _isVlessXhttp(VpnProfile p) =>
+    p.protocol == VpnProtocol.vless &&
+    (p.config['transport'] as String? ?? '') == 'xhttp';
+
 class VpnProvider extends ChangeNotifier {
   final _repo = ProfileRepository();
   late final VpnService _vpn;
@@ -84,37 +88,39 @@ class VpnProvider extends ChangeNotifier {
     _status = VpnStatus.connecting;
     notifyListeners();
     try {
-      if (_activeProfile!.protocol == VpnProtocol.amnezia && Platform.isWindows) {
+      final profile = _activeProfile!;
+
+      if (profile.protocol == VpnProtocol.amnezia && Platform.isWindows) {
         List<String>? bypassIps;
         if (_routingMode == RoutingMode.russiaBypass) {
           bypassIps = await _loadBypassAllowedIps();
         }
         final conf = ConfigBuilder.buildAwgConf(
-          _activeProfile!,
+          profile,
           bypassAllowedIps: bypassIps,
         );
         await _vpn.connectAwg(conf);
+      } else if (Platform.isWindows &&
+          (profile.protocol == VpnProtocol.tuic ||
+              profile.protocol == VpnProtocol.hysteria2)) {
+        // Proxy mode: no TUN, HTTP proxy on localhost, set system proxy.
+        final config = ConfigBuilder.buildProxyMode(profile);
+        await _vpn.connectProxy(singboxConfigJson: ConfigBuilder.toJson(config));
+      } else if (Platform.isWindows && _isVlessXhttp(profile)) {
+        // xhttp is xray-only; run xray standalone with HTTP proxy.
+        final xrayConfig = XrayConfigBuilder.buildStandalone(profile);
+        await _vpn.connectProxy(xrayConfigJson: XrayConfigBuilder.toJson(xrayConfig));
       } else {
-        final tunExclude = await _resolveProxyServerIps(_activeProfile!);
+        // TUN mode: sing-box with full routing (VLESS reality/ws/grpc, WireGuard, mobile).
         final config = ConfigBuilder.build(
-          _activeProfile!,
+          profile,
           routingMode: _routingMode,
           killSwitch: _killSwitch,
           bypassDomains: _bypassDomains,
-          tunExcludeAddresses: tunExclude,
         );
-        String? xrayJson;
-        if (Platform.isWindows &&
-            _activeProfile!.protocol == VpnProtocol.vless &&
-            (_activeProfile!.config['transport'] as String? ?? '') == 'xhttp') {
-          xrayJson = XrayConfigBuilder.toJson(
-            XrayConfigBuilder.build(_activeProfile!),
-          );
-        }
         await _vpn.connect(
           ConfigBuilder.toJson(config),
           excludedApps: _excludedApps,
-          xrayConfigJson: xrayJson,
         );
       }
     } catch (e) {
@@ -189,32 +195,6 @@ class VpnProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Resolves the proxy server hostname to IPv4 CIDRs (/32) so they can be
-  // added to TUN route_exclude_address. Needed when the process making the
-  // outbound connection (sing-box for TUIC/H2, xray for VLESS xhttp) is not
-  // WFP-excluded and its packets would otherwise loop back into TUN.
-  Future<List<String>> _resolveProxyServerIps(VpnProfile profile) async {
-    final isVlessXhttp = profile.protocol == VpnProtocol.vless &&
-        (profile.config['transport'] as String? ?? '') == 'xhttp' &&
-        Platform.isWindows;
-    if (profile.protocol != VpnProtocol.tuic &&
-        profile.protocol != VpnProtocol.hysteria2 &&
-        !isVlessXhttp) {
-      return [];
-    }
-    final server = profile.config['server'] as String?;
-    if (server == null) return [];
-    try {
-      final addrs = await InternetAddress.lookup(server);
-      return addrs
-          .where((a) => a.type == InternetAddressType.IPv4)
-          .map((a) => '${a.address}/32')
-          .toList();
-    } catch (e) {
-      debugPrint('proxy server lookup failed: $e');
-      return [];
-    }
-  }
 
   Future<List<String>> _loadBypassAllowedIps() async {
     try {
