@@ -2,15 +2,27 @@ import 'dart:convert';
 import '../models/profile.dart';
 
 class XrayConfigBuilder {
+  /// Standalone proxy mode: xray handles xhttp outbound.
+  /// Caller sets Windows system proxy to 127.0.0.1:[httpProxyPort].
+  static const int httpProxyPort = 7890;
   static const int socks5Port = 10808;
 
-  static Map<String, dynamic> build(VpnProfile profile) {
+  /// Standalone build: HTTP + SOCKS5 inbounds, VLESS outbound.
+  /// Used for VLESS xhttp on Windows — no sing-box TUN involved.
+  static Map<String, dynamic> buildStandalone(VpnProfile profile) {
     assert(profile.protocol == VpnProtocol.vless);
     final c = profile.config;
 
     return {
       'log': {'loglevel': 'warning'},
       'inbounds': [
+        {
+          'tag': 'http-in',
+          'protocol': 'http',
+          'listen': '127.0.0.1',
+          'port': httpProxyPort,
+          'settings': {},
+        },
         {
           'tag': 'socks-in',
           'protocol': 'socks',

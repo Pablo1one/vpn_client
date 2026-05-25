@@ -9,7 +9,10 @@ enum VpnStatus { disconnected, connecting, connected, disconnecting, error }
 abstract class VpnService {
   Stream<VpnStatus> get statusStream;
   Future<void> connect(String singboxConfigJson,
-      {List<String> excludedApps = const [], String? xrayConfigJson});
+      {List<String> excludedApps = const []});
+  /// Proxy mode: no TUN. Starts a local HTTP proxy (sing-box or xray).
+  /// Caller must set the system proxy before calling; implementation clears it on disconnect.
+  Future<void> connectProxy({String? singboxConfigJson, String? xrayConfigJson});
   Future<void> connectAwg(String confContent);
   Future<void> disconnect();
   void dispose();
@@ -53,9 +56,13 @@ class _MobileVpnService implements VpnService {
 
   @override
   Future<void> connect(String config,
-          {List<String> excludedApps = const [], String? xrayConfigJson}) =>
+          {List<String> excludedApps = const []}) =>
       _method.invokeMethod(
           'connect', {'config': config, 'excludedApps': excludedApps});
+
+  @override
+  Future<void> connectProxy({String? singboxConfigJson, String? xrayConfigJson}) =>
+      throw UnsupportedError('Proxy mode not supported on mobile');
 
   @override
   Future<void> connectAwg(String confContent) =>
@@ -86,7 +93,10 @@ class _WindowsVpnService implements VpnService {
   Process? _xrayProcess;
   File? _xrayConfigFile;
   bool _awgActive = false;
+  bool _proxyMode = false;
   static const _awgTunnelName = 'vpnclient_awg';
+  static const _regPath =
+      r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings';
 
   @override
   Stream<VpnStatus> get statusStream => _controller.stream;
@@ -209,8 +219,93 @@ class _WindowsVpnService implements VpnService {
   }
 
   @override
+  Future<void> connectProxy(
+      {String? singboxConfigJson, String? xrayConfigJson}) async {
+    _controller.add(VpnStatus.connecting);
+    try {
+      await _killExistingProcess();
+
+      if (xrayConfigJson != null) {
+        await _startXray(xrayConfigJson);
+      } else if (singboxConfigJson != null) {
+        final exe = File(_exePath);
+        if (!exe.existsSync()) {
+          throw Exception('sing-box.exe not found.\nExpected: ${exe.path}');
+        }
+        await _startSingboxProxy(singboxConfigJson);
+      } else {
+        throw ArgumentError('either singboxConfigJson or xrayConfigJson required');
+      }
+
+      await _setSystemProxy();
+      _proxyMode = true;
+      _controller.add(VpnStatus.connected);
+    } catch (e) {
+      _controller.add(VpnStatus.error);
+      rethrow;
+    }
+  }
+
+  Future<void> _startSingboxProxy(String configJson) async {
+    _configFile = File(
+      '${Directory.systemTemp.path}\\vpn_client_${DateTime.now().millisecondsSinceEpoch}.json',
+    );
+    await _configFile!.writeAsString(configJson);
+
+    _process = await Process.start(
+      _exePath,
+      ['run', '-c', _configFile!.path],
+      runInShell: false,
+    );
+
+    final proc = _process!;
+    bool started = false;
+    final errLines = <String>[];
+    bool exited = false;
+
+    proc.stdout.transform(utf8.decoder).transform(const LineSplitter()).listen((_) {});
+    proc.stderr
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .listen((l) => errLines.add(l));
+    proc.exitCode.then((_) => exited = true);
+
+    // Poll HTTP proxy port until ready (up to 6 s).
+    for (var i = 0; i < 12; i++) {
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (exited) throw Exception('sing-box exited.\n${errLines.take(3).join('\n')}');
+      try {
+        final s = await Socket.connect('127.0.0.1', 7890,
+            timeout: const Duration(milliseconds: 300));
+        await s.close();
+        started = true;
+        break;
+      } catch (_) {}
+    }
+    if (!started && !exited) {
+      // Port not open yet — proceed and let the process settle.
+    }
+  }
+
+  Future<void> _setSystemProxy() async {
+    await Process.run('reg', [
+      'add', _regPath, '/v', 'ProxyEnable', '/t', 'REG_DWORD', '/d', '1', '/f',
+    ]);
+    await Process.run('reg', [
+      'add', _regPath, '/v', 'ProxyServer', '/t', 'REG_SZ',
+      '/d', '127.0.0.1:7890', '/f',
+    ]);
+  }
+
+  Future<void> _clearSystemProxy() async {
+    await Process.run('reg', [
+      'add', _regPath, '/v', 'ProxyEnable', '/t', 'REG_DWORD', '/d', '0', '/f',
+    ]);
+  }
+
+  @override
   Future<void> connect(String configJson,
-      {List<String> excludedApps = const [], String? xrayConfigJson}) async {
+      {List<String> excludedApps = const []}) async {
     _controller.add(VpnStatus.connecting);
     try {
       final exe = File(_exePath);
@@ -225,11 +320,6 @@ class _WindowsVpnService implements VpnService {
 
       await _ensureWintun();
       await _killExistingProcess();
-
-      // Start xray first so SOCKS5 is available when sing-box connects.
-      if (xrayConfigJson != null) {
-        await _startXray(xrayConfigJson);
-      }
 
       _configFile = File(
         '${Directory.systemTemp.path}\\vpn_client_${DateTime.now().millisecondsSinceEpoch}.json',
@@ -384,7 +474,11 @@ class _WindowsVpnService implements VpnService {
     if (_awgActive) {
       await _uninstallAwgTunnel();
     } else {
-      await _killExistingProcess(); // also kills xray via _killXray()
+      await _killExistingProcess();
+    }
+    if (_proxyMode) {
+      await _clearSystemProxy();
+      _proxyMode = false;
     }
     _controller.add(VpnStatus.disconnected);
   }
@@ -392,6 +486,7 @@ class _WindowsVpnService implements VpnService {
   @override
   void dispose() {
     if (_awgActive) _uninstallAwgTunnel();
+    if (_proxyMode) _clearSystemProxy();
     _xrayProcess?.kill();
     _process?.kill();
     _controller.close();
