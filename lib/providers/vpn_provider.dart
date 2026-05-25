@@ -84,14 +84,13 @@ class VpnProvider extends ChangeNotifier {
     notifyListeners();
     try {
       if (_activeProfile!.protocol == VpnProtocol.amnezia && Platform.isWindows) {
-        List<String> ruCidrs = [];
+        List<String>? bypassIps;
         if (_routingMode == RoutingMode.russiaBypass) {
-          ruCidrs = await _loadRuCidrs();
+          bypassIps = await _loadBypassAllowedIps();
         }
         final conf = ConfigBuilder.buildAwgConf(
           _activeProfile!,
-          routingMode: _routingMode,
-          ruCidrs: ruCidrs,
+          bypassAllowedIps: bypassIps,
         );
         await _vpn.connectAwg(conf);
       } else {
@@ -176,16 +175,17 @@ class VpnProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<List<String>> _loadRuCidrs() async {
+  Future<List<String>> _loadBypassAllowedIps() async {
     try {
-      final data = await rootBundle.loadString('assets/data/iplist_ru.txt');
+      final data =
+          await rootBundle.loadString('assets/data/allowed_ips_bypass.txt');
       return data
           .split('\n')
           .map((l) => l.trim())
           .where((l) => l.isNotEmpty && !l.startsWith('#'))
           .toList();
     } catch (e) {
-      debugPrint('iplist_ru load error: $e');
+      debugPrint('allowed_ips_bypass load error: $e');
       return [];
     }
   }

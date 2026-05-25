@@ -1,6 +1,5 @@
 import 'dart:convert';
 import '../models/profile.dart';
-import 'cidr_utils.dart';
 
 enum RoutingMode { fullVpn, russiaBypass, custom }
 
@@ -42,13 +41,11 @@ class ConfigBuilder {
 
   /// Generates a WireGuard .conf for amneziawg.exe (AWG 1.x and 2.0).
   ///
-  /// When [routingMode] == [RoutingMode.russiaBypass] and [ruCidrs] is non-empty,
-  /// AllowedIPs is set to the complement of [ruCidrs] so Russian traffic bypasses
-  /// the tunnel. IPv6 always goes through the tunnel.
+  /// [bypassAllowedIps] — pre-computed AllowedIPs lines for Russia-bypass mode
+  /// (complement of Russian IP space). When null/empty, uses full-tunnel AllowedIPs.
   static String buildAwgConf(
     VpnProfile profile, {
-    RoutingMode routingMode = RoutingMode.fullVpn,
-    List<String> ruCidrs = const [],
+    List<String>? bypassAllowedIps,
   }) {
     final c = profile.config;
     final buf = StringBuffer();
@@ -61,6 +58,8 @@ class ConfigBuilder {
     buf.writeln('PrivateKey = ${c['privateKey']}');
     buf.writeln('Address = ${c['address']}');
     buf.writeln('DNS = $dns');
+    final mtu = c['mtu'];
+    if (mtu != null) buf.writeln('MTU = $mtu');
 
     const awgParamKeys = [
       'Jc', 'Jmin', 'Jmax', 'S1', 'S2', 'S3', 'S4',
@@ -78,10 +77,8 @@ class ConfigBuilder {
     if (psk.isNotEmpty) buf.writeln('PresharedKey = $psk');
     buf.writeln('Endpoint = ${c['server']}:${c['port']}');
 
-    if (routingMode == RoutingMode.russiaBypass && ruCidrs.isNotEmpty) {
-      // Route everything except Russian IPs through the tunnel.
-      final nonRu = CidrUtils.invertIpv4(ruCidrs);
-      for (final cidr in nonRu) {
+    if (bypassAllowedIps != null && bypassAllowedIps.isNotEmpty) {
+      for (final cidr in bypassAllowedIps) {
         buf.writeln('AllowedIPs = $cidr');
       }
       buf.writeln('AllowedIPs = ::/0');
