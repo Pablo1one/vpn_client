@@ -34,3 +34,4 @@ flutter:
     - assets/bin/awg.exe
     - assets/bin/wintun.dll
     - assets/icons/tray.ico
+    - assets/data/iplist_ru.txt
