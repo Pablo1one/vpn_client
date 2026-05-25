@@ -105,7 +105,8 @@ class VpnProvider extends ChangeNotifier {
         );
         String? xrayJson;
         if (Platform.isWindows &&
-            _activeProfile!.protocol == VpnProtocol.vless) {
+            _activeProfile!.protocol == VpnProtocol.vless &&
+            (_activeProfile!.config['transport'] as String? ?? '') == 'xhttp') {
           xrayJson = XrayConfigBuilder.toJson(
             XrayConfigBuilder.build(_activeProfile!),
           );
@@ -189,11 +190,16 @@ class VpnProvider extends ChangeNotifier {
   }
 
   // Resolves the proxy server hostname to IPv4 CIDRs (/32) so they can be
-  // added to TUN route_exclude_address. Needed for TUIC/Hysteria2 whose
-  // outbound UDP sockets would otherwise loop back into TUN via auto_route.
+  // added to TUN route_exclude_address. Needed when the process making the
+  // outbound connection (sing-box for TUIC/H2, xray for VLESS xhttp) is not
+  // WFP-excluded and its packets would otherwise loop back into TUN.
   Future<List<String>> _resolveProxyServerIps(VpnProfile profile) async {
+    final isVlessXhttp = profile.protocol == VpnProtocol.vless &&
+        (profile.config['transport'] as String? ?? '') == 'xhttp' &&
+        Platform.isWindows;
     if (profile.protocol != VpnProtocol.tuic &&
-        profile.protocol != VpnProtocol.hysteria2) {
+        profile.protocol != VpnProtocol.hysteria2 &&
+        !isVlessXhttp) {
       return [];
     }
     final server = profile.config['server'] as String?;
