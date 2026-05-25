@@ -45,6 +45,7 @@ class VpnProvider extends ChangeNotifier {
   Future<void> init() async {
     try {
       _vpn = VpnService.create();
+      if (Platform.isWindows) await _vpn.cleanup();
       _vpn.statusStream.listen((s) {
         _status = s;
         if (s == VpnStatus.connected) {
