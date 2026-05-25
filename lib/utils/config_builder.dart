@@ -19,6 +19,11 @@ class ConfigBuilder {
   }) {
     final ruMode = routingMode == RoutingMode.russiaBypass;
     final useXray = _useXrayForVless && profile.protocol == VpnProtocol.vless;
+    // TUIC/Hysteria2 use QUIC (UDP) outbound. With strict_route on Windows the
+    // TUN routing table captures sing-box's own UDP sockets, creating a loop.
+    // TCP-based protocols (VLESS) are excluded at the WFP level and work fine.
+    final strictRoute = profile.protocol != VpnProtocol.tuic &&
+        profile.protocol != VpnProtocol.hysteria2;
     return {
       'log': {'level': 'info'},
       'dns': _dns(russiaBypass: ruMode),
@@ -28,7 +33,7 @@ class ConfigBuilder {
           'secret': '',
         },
       },
-      'inbounds': [_tun(excludeIps: tunExcludeAddresses)],
+      'inbounds': [_tun(excludeIps: tunExcludeAddresses, strictRoute: strictRoute)],
       'outbounds': [
         if (useXray)
           _socks5Proxy()
@@ -251,14 +256,18 @@ class ConfigBuilder {
 
   // ── TUN inbound ─────────────────────────────────────────────────────────────
 
-  static Map<String, dynamic> _tun({List<String> excludeIps = const []}) => {
+  static Map<String, dynamic> _tun({
+    List<String> excludeIps = const [],
+    bool strictRoute = true,
+  }) =>
+      {
         'type': 'tun',
         'tag': 'tun-in',
         'interface_name': 'tun0',
         'address': ['172.19.0.1/30', 'fdfe:dcba:9876::1/126'],
         'mtu': 9000,
         'auto_route': true,
-        'strict_route': true,
+        'strict_route': strictRoute,
         'stack': 'gvisor',
         if (excludeIps.isNotEmpty) 'route_exclude_address': excludeIps,
       };

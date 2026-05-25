@@ -173,22 +173,39 @@ class _WindowsVpnService implements VpnService {
       runInShell: false,
     );
 
-    // Drain stdout/stderr so the process doesn't block on full pipe buffers.
-    _xrayProcess!.stdout.drain<void>();
-    _xrayProcess!.stderr.drain<void>();
+    final proc = _xrayProcess!;
+    final errLines = <String>[];
+    bool xrayExited = false;
 
-    // Poll TCP 127.0.0.1:10808 until xray is ready.
-    const maxAttempts = 20; // 10 s
+    proc.stdout.transform(utf8.decoder).transform(const LineSplitter()).listen((_) {});
+    proc.stderr
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .listen((l) => errLines.add(l));
+
+    proc.exitCode.then((_) => xrayExited = true);
+
+    // Poll TCP 127.0.0.1:10808 until xray is ready (up to 6 s).
+    const maxAttempts = 12;
     for (var i = 0; i < maxAttempts; i++) {
       await Future.delayed(const Duration(milliseconds: 500));
+      if (xrayExited) {
+        throw Exception(
+          'xray exited before binding SOCKS5 port.\n'
+          '${errLines.take(5).join('\n')}',
+        );
+      }
       try {
         final s = await Socket.connect('127.0.0.1', 10808,
             timeout: const Duration(milliseconds: 300));
         await s.close();
-        return; // port is open — xray is ready
+        return;
       } catch (_) {}
     }
-    // Proceed anyway — sing-box connects after xray becomes available.
+    if (xrayExited) {
+      throw Exception('xray failed to start.\n${errLines.take(5).join('\n')}');
+    }
+    // Proceed anyway — sing-box will retry SOCKS5 connections on its own.
   }
 
   @override
