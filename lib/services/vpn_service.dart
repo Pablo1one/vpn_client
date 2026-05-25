@@ -15,6 +15,9 @@ abstract class VpnService {
   Future<void> connectProxy({String? singboxConfigJson, String? xrayConfigJson});
   Future<void> connectAwg(String confContent);
   Future<void> disconnect();
+  /// Clears system proxy and kills any stale VPN processes.
+  /// Call at app startup to clean up after a crash.
+  Future<void> cleanup();
   void dispose();
 
   factory VpnService.create() {
@@ -72,6 +75,9 @@ class _MobileVpnService implements VpnService {
   Future<void> disconnect() => _method.invokeMethod('disconnect');
 
   @override
+  Future<void> cleanup() async {}
+
+  @override
   void dispose() {
     _sub.cancel();
     _controller.close();
@@ -119,8 +125,18 @@ class _WindowsVpnService implements VpnService {
   }
 
   Future<void> _killExistingProcess() async {
+    // Kill stale processes from a crashed previous session — by name, not just
+    // by reference. Without this, a stale sing-box.exe keeps tun0 open and
+    // any new sing-box fails to create the interface.
+    await Process.run('taskkill', ['/F', '/IM', 'sing-box.exe'], runInShell: false);
+    await Process.run('taskkill', ['/F', '/IM', 'xray.exe'], runInShell: false);
+
     await _killXray();
-    if (_process == null) return;
+    if (_process == null) {
+      // No tracked process, but we still need to wait for WinTun to release tun0.
+      await Future.delayed(const Duration(milliseconds: 1000));
+      return;
+    }
     await _outSub?.cancel();
     _outSub = null;
     await _errSub?.cancel();
@@ -137,8 +153,8 @@ class _WindowsVpnService implements VpnService {
           },
         )
         .catchError((_) => -1);
-    // Let WinTun release the TUN interface before we recreate it.
-    await Future.delayed(const Duration(milliseconds: 500));
+    // Wait for WinTun to release the tun0 interface before recreating it.
+    await Future.delayed(const Duration(milliseconds: 1000));
     try { await _configFile?.delete(); } catch (_) {}
     _configFile = null;
   }
@@ -466,6 +482,15 @@ class _WindowsVpnService implements VpnService {
     await Process.run(awgExe, ['/uninstalltunnelservice', _awgTunnelName],
         runInShell: false);
     await Future.delayed(const Duration(milliseconds: 500));
+  }
+
+  @override
+  Future<void> cleanup() async {
+    // Called at app startup — clear any proxy and processes left from a crash.
+    await _clearSystemProxy();
+    await Process.run('taskkill', ['/F', '/IM', 'sing-box.exe'], runInShell: false);
+    await Process.run('taskkill', ['/F', '/IM', 'xray.exe'], runInShell: false);
+    _proxyMode = false;
   }
 
   @override
