@@ -94,11 +94,13 @@ class VpnProvider extends ChangeNotifier {
         );
         await _vpn.connectAwg(conf);
       } else {
+        final tunExclude = await _resolveProxyServerIps(_activeProfile!);
         final config = ConfigBuilder.build(
           _activeProfile!,
           routingMode: _routingMode,
           killSwitch: _killSwitch,
           bypassDomains: _bypassDomains,
+          tunExcludeAddresses: tunExclude,
         );
         await _vpn.connect(
           ConfigBuilder.toJson(config),
@@ -173,6 +175,28 @@ class VpnProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList('excludedApps', apps);
     notifyListeners();
+  }
+
+  // Resolves the proxy server hostname to IPv4 CIDRs (/32) so they can be
+  // added to TUN route_exclude_address. Needed for TUIC/Hysteria2 whose
+  // outbound UDP sockets would otherwise loop back into TUN via auto_route.
+  Future<List<String>> _resolveProxyServerIps(VpnProfile profile) async {
+    if (profile.protocol != VpnProtocol.tuic &&
+        profile.protocol != VpnProtocol.hysteria2) {
+      return [];
+    }
+    final server = profile.config['server'] as String?;
+    if (server == null) return [];
+    try {
+      final addrs = await InternetAddress.lookup(server);
+      return addrs
+          .where((a) => a.type == InternetAddressType.IPv4)
+          .map((a) => '${a.address}/32')
+          .toList();
+    } catch (e) {
+      debugPrint('proxy server lookup failed: $e');
+      return [];
+    }
   }
 
   Future<List<String>> _loadBypassAllowedIps() async {
