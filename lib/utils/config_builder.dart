@@ -152,9 +152,12 @@ class ConfigBuilder {
           'headers': {'Host': c['host'] ?? c['sni']},
         };
       case 'xhttp':
+        // sing-box <1.12 does not ship with xhttp/splithttp support.
+        // Fall back to http transport — TLS/TCP connects but xhttp framing
+        // won't match the server; update sing-box.exe to fix properly.
         out['transport'] = {
-          'type': 'xhttp',
-          'host': c['sni'] ?? c['server'],
+          'type': 'http',
+          'host': [c['sni'] ?? c['server']],
           'path': c['path'] ?? '/',
         };
     }
@@ -238,10 +241,8 @@ class ConfigBuilder {
         'address': ['172.19.0.1/30', 'fdfe:dcba:9876::1/126'],
         'mtu': 9000,
         'auto_route': true,
-        'strict_route': true,
+        'strict_route': false,
         'stack': 'mixed',
-        'sniff': true,
-        'sniff_override_destination': true,
         if (excludeIps.isNotEmpty) 'route_exclude_address': excludeIps,
       };
 
