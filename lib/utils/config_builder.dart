@@ -153,8 +153,8 @@ class ConfigBuilder {
         };
       case 'xhttp':
         out['transport'] = {
-          'type': 'http',
-          'host': [c['sni']],
+          'type': 'splithttp',
+          'host': c['sni'] ?? c['server'],
           'path': c['path'] ?? '/',
         };
     }

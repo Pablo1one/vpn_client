@@ -143,10 +143,12 @@ class VpnProvider extends ChangeNotifier {
   }
 
   Future<void> selectProfile(VpnProfile profile) async {
+    final wasConnected = isConnected;
     _activeProfile = profile;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('lastProfileId', profile.id);
     notifyListeners();
+    if (wasConnected) await connect();
   }
 
   Future<void> setKillSwitch(bool value) async {
