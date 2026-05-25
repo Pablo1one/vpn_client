@@ -10,6 +10,7 @@ class ConfigBuilder {
     RoutingMode routingMode = RoutingMode.fullVpn,
     List<String> bypassDomains = const [],
     bool killSwitch = false,
+    List<String> tunExcludeAddresses = const [],
   }) {
     final ruMode = routingMode == RoutingMode.russiaBypass;
     return {
@@ -21,7 +22,7 @@ class ConfigBuilder {
           'secret': '',
         },
       },
-      'inbounds': [_tun(excludeIps: _tunExcludeIps(profile))],
+      'inbounds': [_tun(excludeIps: tunExcludeAddresses)],
       'outbounds': [
         _outbound(profile),
         {'type': 'direct', 'tag': 'direct'},
@@ -229,20 +230,6 @@ class ConfigBuilder {
   }
 
   // ── TUN inbound ─────────────────────────────────────────────────────────────
-
-  // QUIC-based outbounds (TUIC, Hysteria2) open OS UDP sockets to the proxy
-  // server. With auto_route=true those sockets would hit the TUN routes and
-  // loop back into sing-box. route_exclude_address bypasses TUN for the server
-  // IP at the WFP level so the UDP datagrams leave through the physical adapter.
-  static List<String> _tunExcludeIps(VpnProfile p) {
-    if (p.protocol != VpnProtocol.tuic && p.protocol != VpnProtocol.hysteria2) {
-      return const [];
-    }
-    final server = p.config['server'] as String?;
-    if (server == null) return const [];
-    final ipv4 = RegExp(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$');
-    return ipv4.hasMatch(server) ? ['$server/32'] : const [];
-  }
 
   static Map<String, dynamic> _tun({List<String> excludeIps = const []}) => {
         'type': 'tun',
