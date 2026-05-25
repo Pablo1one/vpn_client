@@ -153,7 +153,7 @@ class ConfigBuilder {
         };
       case 'xhttp':
         out['transport'] = {
-          'type': 'splithttp',
+          'type': 'xhttp',
           'host': c['sni'] ?? c['server'],
           'path': c['path'] ?? '/',
         };
@@ -239,7 +239,7 @@ class ConfigBuilder {
         'mtu': 9000,
         'auto_route': true,
         'strict_route': true,
-        'stack': 'gvisor',
+        'stack': 'mixed',
         'sniff': true,
         'sniff_override_destination': true,
         if (excludeIps.isNotEmpty) 'route_exclude_address': excludeIps,
