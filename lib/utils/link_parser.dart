@@ -376,7 +376,7 @@ class LinkParser {
       if (eq < 0) continue;
       final key = line.substring(0, eq).trim().toLowerCase();
       final val = line.substring(eq + 1).trim();
-      if ({'jc', 'jmin', 'jmax', 's1', 's2', 'h1', 'h2', 'h3', 'h4'}
+      if ({'jc', 'jmin', 'jmax', 's1', 's2', 's3', 's4', 'h1', 'h2', 'h3', 'h4'}
           .contains(key)) {
         out[key] = int.tryParse(val) ?? val;
       }
@@ -419,6 +419,8 @@ class LinkParser {
       }
       final isAmnezia = awgParams.isNotEmpty;
 
+      final mtu = int.tryParse(data['interface_mtu'] ?? '');
+
       final cfg = <String, dynamic>{
         'privateKey': data['interface_privatekey'] ?? '',
         'publicKey': data['peer_publickey'] ?? '',
@@ -428,6 +430,7 @@ class LinkParser {
         'address': data['interface_address'] ?? '10.0.0.1/32',
         'dns': data['interface_dns'] ?? '1.1.1.1',
         'allowedIPs': data['peer_allowedips'] ?? '0.0.0.0/0',
+        if (mtu != null) 'mtu': mtu,
         ...awgParams,
       };
 
