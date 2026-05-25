@@ -21,7 +21,7 @@ class ConfigBuilder {
           'secret': '',
         },
       },
-      'inbounds': [_tun()],
+      'inbounds': [_tun(excludeIps: _tunExcludeIps(profile))],
       'outbounds': [
         _outbound(profile),
         {'type': 'direct', 'tag': 'direct'},
@@ -230,7 +230,21 @@ class ConfigBuilder {
 
   // ── TUN inbound ─────────────────────────────────────────────────────────────
 
-  static Map<String, dynamic> _tun() => {
+  // QUIC-based outbounds (TUIC, Hysteria2) open OS UDP sockets to the proxy
+  // server. With auto_route=true those sockets would hit the TUN routes and
+  // loop back into sing-box. route_exclude_address bypasses TUN for the server
+  // IP at the WFP level so the UDP datagrams leave through the physical adapter.
+  static List<String> _tunExcludeIps(VpnProfile p) {
+    if (p.protocol != VpnProtocol.tuic && p.protocol != VpnProtocol.hysteria2) {
+      return const [];
+    }
+    final server = p.config['server'] as String?;
+    if (server == null) return const [];
+    final ipv4 = RegExp(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$');
+    return ipv4.hasMatch(server) ? ['$server/32'] : const [];
+  }
+
+  static Map<String, dynamic> _tun({List<String> excludeIps = const []}) => {
         'type': 'tun',
         'tag': 'tun-in',
         'interface_name': 'tun0',
@@ -241,6 +255,7 @@ class ConfigBuilder {
         'stack': 'gvisor',
         'sniff': true,
         'sniff_override_destination': true,
+        if (excludeIps.isNotEmpty) 'route_exclude_address': excludeIps,
       };
 
   // ── DNS ─────────────────────────────────────────────────────────────────────
