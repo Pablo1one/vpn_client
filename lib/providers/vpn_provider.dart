@@ -7,6 +7,7 @@ import '../services/profile_repository.dart';
 import '../services/speed_service.dart';
 import '../services/vpn_service.dart';
 import '../utils/config_builder.dart';
+import '../utils/xray_config_builder.dart';
 
 class VpnProvider extends ChangeNotifier {
   final _repo = ProfileRepository();
@@ -102,9 +103,17 @@ class VpnProvider extends ChangeNotifier {
           bypassDomains: _bypassDomains,
           tunExcludeAddresses: tunExclude,
         );
+        String? xrayJson;
+        if (Platform.isWindows &&
+            _activeProfile!.protocol == VpnProtocol.vless) {
+          xrayJson = XrayConfigBuilder.toJson(
+            XrayConfigBuilder.build(_activeProfile!),
+          );
+        }
         await _vpn.connect(
           ConfigBuilder.toJson(config),
           excludedApps: _excludedApps,
+          xrayConfigJson: xrayJson,
         );
       }
     } catch (e) {

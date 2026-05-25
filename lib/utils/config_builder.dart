@@ -1,9 +1,14 @@
 import 'dart:convert';
+import 'dart:io';
 import '../models/profile.dart';
+import 'xray_config_builder.dart';
 
 enum RoutingMode { fullVpn, russiaBypass, custom }
 
 class ConfigBuilder {
+  // When true, VLESS outbound is replaced with SOCKS5 pointing to xray.
+  // xray handles the VLESS+xhttp connection; sing-box just does TUN + routing.
+  static bool get _useXrayForVless => Platform.isWindows;
 
   static Map<String, dynamic> build(
     VpnProfile profile, {
@@ -13,6 +18,7 @@ class ConfigBuilder {
     List<String> tunExcludeAddresses = const [],
   }) {
     final ruMode = routingMode == RoutingMode.russiaBypass;
+    final useXray = _useXrayForVless && profile.protocol == VpnProtocol.vless;
     return {
       'log': {'level': 'info'},
       'dns': _dns(russiaBypass: ruMode),
@@ -24,7 +30,10 @@ class ConfigBuilder {
       },
       'inbounds': [_tun(excludeIps: tunExcludeAddresses)],
       'outbounds': [
-        _outbound(profile),
+        if (useXray)
+          _socks5Proxy()
+        else
+          _outbound(profile),
         {'type': 'direct', 'tag': 'direct'},
         {'type': 'block', 'tag': 'block'},
         {'type': 'dns', 'tag': 'dns-out'},
@@ -96,6 +105,14 @@ class ConfigBuilder {
   }
 
   // ── Outbound ────────────────────────────────────────────────────────────────
+
+  static Map<String, dynamic> _socks5Proxy() => {
+        'type': 'socks',
+        'tag': 'proxy',
+        'server': '127.0.0.1',
+        'server_port': XrayConfigBuilder.socks5Port,
+        'version': '5',
+      };
 
   static Map<String, dynamic> _outbound(VpnProfile p) => switch (p.protocol) {
         VpnProtocol.vless => _vless(p.config),
@@ -241,8 +258,8 @@ class ConfigBuilder {
         'address': ['172.19.0.1/30', 'fdfe:dcba:9876::1/126'],
         'mtu': 9000,
         'auto_route': true,
-        'strict_route': false,
-        'stack': 'mixed',
+        'strict_route': true,
+        'stack': 'gvisor',
         if (excludeIps.isNotEmpty) 'route_exclude_address': excludeIps,
       };
 

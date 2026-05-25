@@ -9,7 +9,7 @@ enum VpnStatus { disconnected, connecting, connected, disconnecting, error }
 abstract class VpnService {
   Stream<VpnStatus> get statusStream;
   Future<void> connect(String singboxConfigJson,
-      {List<String> excludedApps = const []});
+      {List<String> excludedApps = const [], String? xrayConfigJson});
   Future<void> connectAwg(String confContent);
   Future<void> disconnect();
   void dispose();
@@ -53,7 +53,7 @@ class _MobileVpnService implements VpnService {
 
   @override
   Future<void> connect(String config,
-          {List<String> excludedApps = const []}) =>
+          {List<String> excludedApps = const [], String? xrayConfigJson}) =>
       _method.invokeMethod(
           'connect', {'config': config, 'excludedApps': excludedApps});
 
@@ -73,6 +73,7 @@ class _MobileVpnService implements VpnService {
 
 // ─── Windows ─────────────────────────────────────────────────────────────────
 // Launches sing-box.exe as a subprocess with the generated config.
+// For VLESS profiles also launches xray.exe (SOCKS5 on 127.0.0.1:10808).
 // Requires sing-box.exe at: <app_dir>\data\flutter_assets\assets\bin\sing-box.exe
 // WinTun driver must be installed: https://www.wintun.net/
 // Run the app as Administrator for TUN interface creation.
@@ -82,6 +83,8 @@ class _WindowsVpnService implements VpnService {
   StreamSubscription? _outSub;
   StreamSubscription? _errSub;
   File? _configFile;
+  Process? _xrayProcess;
+  File? _xrayConfigFile;
   bool _awgActive = false;
   static const _awgTunnelName = 'vpnclient_awg';
 
@@ -106,6 +109,7 @@ class _WindowsVpnService implements VpnService {
   }
 
   Future<void> _killExistingProcess() async {
+    await _killXray();
     if (_process == null) return;
     await _outSub?.cancel();
     _outSub = null;
@@ -125,13 +129,71 @@ class _WindowsVpnService implements VpnService {
         .catchError((_) => -1);
     // Let WinTun release the TUN interface before we recreate it.
     await Future.delayed(const Duration(milliseconds: 500));
-    await _configFile?.delete().catchError((_) {});
+    try { await _configFile?.delete(); } catch (_) {}
     _configFile = null;
+  }
+
+  Future<void> _killXray() async {
+    final old = _xrayProcess;
+    _xrayProcess = null;
+    if (old != null) {
+      old.kill(ProcessSignal.sigterm);
+      await old.exitCode
+          .timeout(const Duration(seconds: 3), onTimeout: () {
+            old.kill();
+            return -1;
+          })
+          .catchError((_) => -1);
+    }
+    try { await _xrayConfigFile?.delete(); } catch (_) {}
+    _xrayConfigFile = null;
+  }
+
+  // Starts xray.exe with the given JSON config.
+  // Waits until SOCKS5 port 10808 is accepting connections (up to 10 s).
+  Future<void> _startXray(String xrayConfigJson) async {
+    final xrayExe = File('$_binDir\\xray.exe');
+    if (!xrayExe.existsSync()) {
+      throw Exception(
+        'xray.exe not found.\n'
+        'Expected: ${xrayExe.path}\n'
+        'Download from https://github.com/XTLS/Xray-core/releases '
+        'and place at assets/bin/xray.exe, then rebuild.',
+      );
+    }
+
+    _xrayConfigFile = File(
+      '${Directory.systemTemp.path}\\vpn_client_xray_${DateTime.now().millisecondsSinceEpoch}.json',
+    );
+    await _xrayConfigFile!.writeAsString(xrayConfigJson);
+
+    _xrayProcess = await Process.start(
+      xrayExe.path,
+      ['run', '-c', _xrayConfigFile!.path],
+      runInShell: false,
+    );
+
+    // Drain stdout/stderr so the process doesn't block on full pipe buffers.
+    _xrayProcess!.stdout.drain<void>();
+    _xrayProcess!.stderr.drain<void>();
+
+    // Poll TCP 127.0.0.1:10808 until xray is ready.
+    const maxAttempts = 20; // 10 s
+    for (var i = 0; i < maxAttempts; i++) {
+      await Future.delayed(const Duration(milliseconds: 500));
+      try {
+        final s = await Socket.connect('127.0.0.1', 10808,
+            timeout: const Duration(milliseconds: 300));
+        await s.close();
+        return; // port is open — xray is ready
+      } catch (_) {}
+    }
+    // Proceed anyway — sing-box connects after xray becomes available.
   }
 
   @override
   Future<void> connect(String configJson,
-      {List<String> excludedApps = const []}) async {
+      {List<String> excludedApps = const [], String? xrayConfigJson}) async {
     _controller.add(VpnStatus.connecting);
     try {
       final exe = File(_exePath);
@@ -146,6 +208,11 @@ class _WindowsVpnService implements VpnService {
 
       await _ensureWintun();
       await _killExistingProcess();
+
+      // Start xray first so SOCKS5 is available when sing-box connects.
+      if (xrayConfigJson != null) {
+        await _startXray(xrayConfigJson);
+      }
 
       _configFile = File(
         '${Directory.systemTemp.path}\\vpn_client_${DateTime.now().millisecondsSinceEpoch}.json',
@@ -300,7 +367,7 @@ class _WindowsVpnService implements VpnService {
     if (_awgActive) {
       await _uninstallAwgTunnel();
     } else {
-      await _killExistingProcess();
+      await _killExistingProcess(); // also kills xray via _killXray()
     }
     _controller.add(VpnStatus.disconnected);
   }
@@ -308,6 +375,7 @@ class _WindowsVpnService implements VpnService {
   @override
   void dispose() {
     if (_awgActive) _uninstallAwgTunnel();
+    _xrayProcess?.kill();
     _process?.kill();
     _controller.close();
   }
