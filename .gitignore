@@ -37,6 +37,7 @@ macos/Flutter/
 *.env
 singbox/
 assets/bin/sing-box.exe
+assets/bin/xray.exe
 assets/bin/wintun.dll
 android/app/libs/libbox.aar
 ios/LibBox.xcframework/
