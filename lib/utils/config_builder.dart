@@ -6,9 +6,14 @@ import 'xray_config_builder.dart';
 enum RoutingMode { fullVpn, russiaBypass, custom }
 
 class ConfigBuilder {
-  // When true, VLESS outbound is replaced with SOCKS5 pointing to xray.
-  // xray handles the VLESS+xhttp connection; sing-box just does TUN + routing.
-  static bool get _useXrayForVless => Platform.isWindows;
+  // xray is only used for VLESS xhttp transport on Windows.
+  // Other VLESS transports (reality, ws, grpc, http) use sing-box's own outbound
+  // which is WFP-excluded and can reach the server without looping through TUN.
+  // xhttp is Xray-specific and is not supported in any sing-box version.
+  static bool _useXray(VpnProfile p) =>
+      Platform.isWindows &&
+      p.protocol == VpnProtocol.vless &&
+      (p.config['transport'] as String? ?? '') == 'xhttp';
 
   static Map<String, dynamic> build(
     VpnProfile profile, {
@@ -18,12 +23,7 @@ class ConfigBuilder {
     List<String> tunExcludeAddresses = const [],
   }) {
     final ruMode = routingMode == RoutingMode.russiaBypass;
-    final useXray = _useXrayForVless && profile.protocol == VpnProtocol.vless;
-    // TUIC/Hysteria2 use QUIC (UDP) outbound. With strict_route on Windows the
-    // TUN routing table captures sing-box's own UDP sockets, creating a loop.
-    // TCP-based protocols (VLESS) are excluded at the WFP level and work fine.
-    final strictRoute = profile.protocol != VpnProtocol.tuic &&
-        profile.protocol != VpnProtocol.hysteria2;
+    final useXray = _useXray(profile);
     return {
       'log': {'level': 'info'},
       'dns': _dns(russiaBypass: ruMode),
@@ -33,7 +33,7 @@ class ConfigBuilder {
           'secret': '',
         },
       },
-      'inbounds': [_tun(excludeIps: tunExcludeAddresses, strictRoute: strictRoute)],
+      'inbounds': [_tun(excludeIps: tunExcludeAddresses)],
       'outbounds': [
         if (useXray)
           _socks5Proxy()
@@ -256,18 +256,14 @@ class ConfigBuilder {
 
   // ── TUN inbound ─────────────────────────────────────────────────────────────
 
-  static Map<String, dynamic> _tun({
-    List<String> excludeIps = const [],
-    bool strictRoute = true,
-  }) =>
-      {
+  static Map<String, dynamic> _tun({List<String> excludeIps = const []}) => {
         'type': 'tun',
         'tag': 'tun-in',
         'interface_name': 'tun0',
         'address': ['172.19.0.1/30', 'fdfe:dcba:9876::1/126'],
         'mtu': 9000,
         'auto_route': true,
-        'strict_route': strictRoute,
+        'strict_route': true,
         'stack': 'gvisor',
         if (excludeIps.isNotEmpty) 'route_exclude_address': excludeIps,
       };
