@@ -254,14 +254,35 @@ class _WindowsVpnService implements VpnService {
         );
       }
 
-      // Wait for the tunnel service to establish the WireGuard handshake.
-      await Future.delayed(const Duration(seconds: 5));
+      await _waitForAwgHandshake();
       _awgActive = true;
       _controller.add(VpnStatus.connected);
     } catch (e) {
       _controller.add(VpnStatus.error);
       rethrow;
     }
+  }
+
+  // Polls `awg show <tunnel>` every 500 ms until the first WireGuard handshake
+  // appears, which confirms that routes are applied and traffic flows.
+  // Falls back to a plain delay if awg.exe is unavailable (timeout = 30 s).
+  Future<void> _waitForAwgHandshake() async {
+    final awgCtl = File('$_binDir\\awg.exe');
+    if (!awgCtl.existsSync()) {
+      await Future.delayed(const Duration(seconds: 10));
+      return;
+    }
+    const maxAttempts = 60; // 30 s
+    for (var i = 0; i < maxAttempts; i++) {
+      await Future.delayed(const Duration(milliseconds: 500));
+      final r = await Process.run(
+        awgCtl.path,
+        ['show', _awgTunnelName],
+        runInShell: false,
+      );
+      if ((r.stdout as String).contains('latest handshake:')) return;
+    }
+    // Timeout — proceed anyway rather than leaving the user stuck.
   }
 
   Future<void> _uninstallAwgTunnel() async {
