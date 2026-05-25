@@ -238,7 +238,7 @@ class ConfigBuilder {
         'mtu': 9000,
         'auto_route': true,
         'strict_route': true,
-        'stack': 'mixed',
+        'stack': 'gvisor',
         'sniff': true,
         'sniff_override_destination': true,
       };
