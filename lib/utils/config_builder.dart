@@ -78,10 +78,12 @@ class ConfigBuilder {
     buf.writeln('Endpoint = ${c['server']}:${c['port']}');
 
     if (bypassAllowedIps != null && bypassAllowedIps.isNotEmpty) {
+      // ::/0 intentionally omitted — adding it triggers the wireguard-windows
+      // kill-switch WFP rule that blocks all direct (non-tunnel) traffic,
+      // which would prevent Russian IPs from going through the physical adapter.
       for (final cidr in bypassAllowedIps) {
         buf.writeln('AllowedIPs = $cidr');
       }
-      buf.writeln('AllowedIPs = ::/0');
     } else {
       final fallback = c['allowedIPs'] as String? ?? '0.0.0.0/0, ::/0';
       buf.writeln('AllowedIPs = $fallback');
