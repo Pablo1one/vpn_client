@@ -1,5 +1,6 @@
 import 'dart:convert';
 import '../models/profile.dart';
+import 'cidr_utils.dart';
 
 enum RoutingMode { fullVpn, russiaBypass, custom }
 
@@ -40,20 +41,26 @@ class ConfigBuilder {
       const JsonEncoder.withIndent('  ').convert(config);
 
   /// Generates a WireGuard .conf for amneziawg.exe (AWG 1.x and 2.0).
-  static String buildAwgConf(VpnProfile profile) {
+  ///
+  /// When [routingMode] == [RoutingMode.russiaBypass] and [ruCidrs] is non-empty,
+  /// AllowedIPs is set to the complement of [ruCidrs] so Russian traffic bypasses
+  /// the tunnel. IPv6 always goes through the tunnel.
+  static String buildAwgConf(
+    VpnProfile profile, {
+    RoutingMode routingMode = RoutingMode.fullVpn,
+    List<String> ruCidrs = const [],
+  }) {
     final c = profile.config;
     final buf = StringBuffer();
 
     // Prefer values from the original imported .conf so we don't break
     // setups where DNS points to the server's internal gateway IP.
     final dns = c['dns'] as String? ?? '1.1.1.1';
-    final allowedIPs = c['allowedIPs'] as String? ?? '0.0.0.0/0, ::/0';
 
     buf.writeln('[Interface]');
     buf.writeln('PrivateKey = ${c['privateKey']}');
     buf.writeln('Address = ${c['address']}');
     buf.writeln('DNS = $dns');
-    buf.writeln('MTU = 1380');
 
     const awgParamKeys = [
       'Jc', 'Jmin', 'Jmax', 'S1', 'S2', 'S3', 'S4',
@@ -70,7 +77,19 @@ class ConfigBuilder {
     final psk = c['presharedKey'] as String? ?? '';
     if (psk.isNotEmpty) buf.writeln('PresharedKey = $psk');
     buf.writeln('Endpoint = ${c['server']}:${c['port']}');
-    buf.writeln('AllowedIPs = $allowedIPs');
+
+    if (routingMode == RoutingMode.russiaBypass && ruCidrs.isNotEmpty) {
+      // Route everything except Russian IPs through the tunnel.
+      final nonRu = CidrUtils.invertIpv4(ruCidrs);
+      for (final cidr in nonRu) {
+        buf.writeln('AllowedIPs = $cidr');
+      }
+      buf.writeln('AllowedIPs = ::/0');
+    } else {
+      final fallback = c['allowedIPs'] as String? ?? '0.0.0.0/0, ::/0';
+      buf.writeln('AllowedIPs = $fallback');
+    }
+
     buf.writeln('PersistentKeepalive = 25');
 
     return buf.toString();

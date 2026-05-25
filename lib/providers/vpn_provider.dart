@@ -84,7 +84,15 @@ class VpnProvider extends ChangeNotifier {
     notifyListeners();
     try {
       if (_activeProfile!.protocol == VpnProtocol.amnezia && Platform.isWindows) {
-        final conf = ConfigBuilder.buildAwgConf(_activeProfile!);
+        List<String> ruCidrs = [];
+        if (_routingMode == RoutingMode.russiaBypass) {
+          ruCidrs = await _loadRuCidrs();
+        }
+        final conf = ConfigBuilder.buildAwgConf(
+          _activeProfile!,
+          routingMode: _routingMode,
+          ruCidrs: ruCidrs,
+        );
         await _vpn.connectAwg(conf);
       } else {
         final config = ConfigBuilder.build(
@@ -166,6 +174,20 @@ class VpnProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList('excludedApps', apps);
     notifyListeners();
+  }
+
+  Future<List<String>> _loadRuCidrs() async {
+    try {
+      final data = await rootBundle.loadString('assets/data/iplist_ru.txt');
+      return data
+          .split('\n')
+          .map((l) => l.trim())
+          .where((l) => l.isNotEmpty && !l.startsWith('#'))
+          .toList();
+    } catch (e) {
+      debugPrint('iplist_ru load error: $e');
+      return [];
+    }
   }
 
   /// Returns list of installed apps as {package, name} maps (Android only).
