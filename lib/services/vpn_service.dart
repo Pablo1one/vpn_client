@@ -140,16 +140,30 @@ class _WindowsVpnService implements VpnService {
 
   // sing-box не удаляет tun0 при падении — следующий запуск упадёт с "file already exists"
   Future<void> _removeTunAdapter() async {
+    // удаляем все tun* адаптеры (имя может отличаться при крэше)
     await Process.run(
       'powershell',
-      ['-Command', 'Remove-NetAdapter -Name "tun0" -Confirm:\$false -ErrorAction SilentlyContinue'],
+      [
+        '-Command',
+        r'Get-NetAdapter | Where-Object { $_.Name -like "tun*" } | '
+            r'Remove-NetAdapter -Confirm:$false -ErrorAction SilentlyContinue',
+      ],
       runInShell: false,
     );
+    // fallback — netsh
+    await Process.run(
+      'netsh', ['interface', 'delete', 'interface', 'tun0'],
+      runInShell: false,
+    );
+    // ждём пока драйвер WinTun освободит адаптер
+    await Future.delayed(const Duration(milliseconds: 2000));
   }
 
   Future<void> _killExistingProcess() async {
     await Process.run('taskkill', ['/F', '/IM', 'sing-box.exe'], runInShell: false);
     await Process.run('taskkill', ['/F', '/IM', 'xray.exe'], runInShell: false);
+    // ждём завершения процессов перед удалением адаптера
+    await Future.delayed(const Duration(milliseconds: 1200));
     await _removeTunAdapter();
 
     await _killProxy();

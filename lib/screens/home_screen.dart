@@ -34,25 +34,40 @@ class HomeScreen extends StatelessWidget {
                       ? vpn.disconnect
                       : vpn.connect,
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
+
+            // таймер — фиксированная высота, не прыгает
             _ConnectionTimer(connectedAt: vpn.connectedAt),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
+
+            // скорость — всегда занимает место, opacity меняется
             _SpeedWidget(stream: vpn.speedStream, visible: vpn.isConnected),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
+
+            // имя профиля и флаг — всегда на месте
             _ProfileLabel(
               name: vpn.activeProfile?.name,
               countryCode: vpn.activeCountryCode,
             ),
-            const SizedBox(height: 6),
-            if (vpn.activeProfile != null)
-              Text(
-                vpn.activeProfile!.protocolLabel,
-                style: const TextStyle(fontSize: 12, color: Color(0xFF4A5A6A)),
-              ),
+            const SizedBox(height: 5),
+
+            // протокол — фиксированная высота
+            SizedBox(
+              height: 18,
+              child: vpn.activeProfile != null
+                  ? Text(
+                      vpn.activeProfile!.protocolLabel,
+                      style: const TextStyle(
+                          fontSize: 12, color: Color(0xFF4A5A6A)),
+                    )
+                  : null,
+            ),
             const SizedBox(height: 8),
+
             _RoutingBadge(vpn: vpn),
+
             if (vpn.error != null) ...[
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 40),
                 child: Text(
@@ -226,44 +241,43 @@ class _ConnectButtonState extends State<_ConnectButton>
         onTap: active ? widget.onTap : null,
         child: AnimatedBuilder(
           animation: Listenable.merge([_spin, _pulse]),
-          builder: (_, __) {
-            return Stack(
-              alignment: Alignment.center,
-              children: [
-                if (busy) ...[
-                  // внешнее пульсирующее кольцо
-                  SizedBox(
-                    width: 200 + _pulse.value * 12,
-                    height: 200 + _pulse.value * 12,
-                    child: CircularProgressIndicator(
-                      value: null,
-                      color: AppTheme.cyan.withOpacity(0.18 + _pulse.value * 0.15),
-                      strokeWidth: 1.5,
+          builder: (_, __) => Stack(
+            alignment: Alignment.center,
+            children: [
+              if (busy) ...[
+                // внешнее пульсирующее кольцо
+                SizedBox(
+                  width: 200 + _pulse.value * 14,
+                  height: 200 + _pulse.value * 14,
+                  child: CircularProgressIndicator(
+                    value: null,
+                    color: AppTheme.cyan
+                        .withOpacity(0.15 + _pulse.value * 0.18),
+                    strokeWidth: 1.5,
+                  ),
+                ),
+                // основное дуговое кольцо с градиентом
+                Transform.rotate(
+                  angle: _spin.value * 6.2832,
+                  child: SizedBox(
+                    width: 188,
+                    height: 188,
+                    child: CustomPaint(
+                      painter: _ArcPainter(AppTheme.cyan),
                     ),
                   ),
-                  // основное кольцо
-                  Transform.rotate(
-                    angle: _spin.value * 6.2832,
-                    child: SizedBox(
-                      width: 188,
-                      height: 188,
-                      child: CustomPaint(
-                        painter: _ArcPainter(AppTheme.cyan),
-                      ),
-                    ),
-                  ),
-                ],
-                button,
+                ),
               ],
-            );
-          },
+              button,
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-/// Рисует дугу ~270° с градиентом от прозрачного к cyan
+/// Дуга ~270° с градиентом от прозрачного к cyan
 class _ArcPainter extends CustomPainter {
   final Color color;
   const _ArcPainter(this.color);
@@ -294,10 +308,11 @@ class _ProfileLabel extends StatelessWidget {
   final String? countryCode;
   const _ProfileLabel({this.name, this.countryCode});
 
+  // правильная формула: 'A' = 0x1F1E6, не 0x1F1E0
   static String? _flag(String? cc) {
     if (cc == null || cc.length != 2) return null;
     return cc.toUpperCase().runes
-        .map((r) => String.fromCharCode(0x1F1E0 + r - 65))
+        .map((r) => String.fromCharCode(0x1F1E6 + r - 65))
         .join();
   }
 
@@ -328,12 +343,15 @@ class _ProfileLabel extends StatelessWidget {
           ),
           const SizedBox(width: 10),
         ],
-        Text(
-          name!,
-          style: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w500,
-            color: Color(0xFFB0C4D8),
+        Flexible(
+          child: Text(
+            name!,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+              color: Color(0xFFB0C4D8),
+            ),
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],
@@ -349,26 +367,36 @@ class _ConnectionTimer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (connectedAt == null) return const SizedBox(height: 28);
-    return StreamBuilder<int>(
-      stream: Stream.periodic(const Duration(seconds: 1), (i) => i),
-      builder: (_, __) {
-        final elapsed = DateTime.now().difference(connectedAt!);
-        final h = elapsed.inHours;
-        final m = (elapsed.inMinutes % 60).toString().padLeft(2, '0');
-        final s = (elapsed.inSeconds % 60).toString().padLeft(2, '0');
-        final label = h > 0 ? '${h.toString().padLeft(2, '0')}:$m:$s' : '$m:$s';
-        return Text(
-          label,
-          style: const TextStyle(
-            color: AppTheme.purple,
-            fontSize: 22,
-            fontWeight: FontWeight.w700,
-            fontFamily: 'monospace',
-            letterSpacing: 3,
-          ),
-        );
-      },
+    // фиксированная высота — layout не прыгает
+    return SizedBox(
+      height: 30,
+      child: AnimatedOpacity(
+        opacity: connectedAt != null ? 1.0 : 0.0,
+        duration: const Duration(milliseconds: 300),
+        child: StreamBuilder<int>(
+          stream: Stream.periodic(const Duration(seconds: 1), (i) => i),
+          builder: (_, __) {
+            final elapsed = connectedAt != null
+                ? DateTime.now().difference(connectedAt!)
+                : Duration.zero;
+            final h = elapsed.inHours;
+            final m = (elapsed.inMinutes % 60).toString().padLeft(2, '0');
+            final s = (elapsed.inSeconds % 60).toString().padLeft(2, '0');
+            final label =
+                h > 0 ? '${h.toString().padLeft(2, '0')}:$m:$s' : '$m:$s';
+            return Text(
+              label,
+              style: const TextStyle(
+                color: AppTheme.purple,
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                fontFamily: 'monospace',
+                letterSpacing: 3,
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
 }
@@ -382,16 +410,17 @@ class _SpeedWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!visible) return const SizedBox(height: 24);
-    return StreamBuilder<SpeedData>(
-      stream: stream,
-      builder: (_, snap) {
-        final data = snap.data ?? SpeedData.empty;
-        return AnimatedOpacity(
-          opacity: visible ? 1 : 0,
-          duration: const Duration(milliseconds: 400),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    // всегда занимает одно и то же место — только opacity меняется
+    return AnimatedOpacity(
+      opacity: visible ? 1.0 : 0.0,
+      duration: const Duration(milliseconds: 400),
+      child: StreamBuilder<SpeedData>(
+        stream: stream,
+        builder: (_, snap) {
+          final data = snap.data ?? SpeedData.empty;
+          return Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
               color: AppTheme.surface,
               borderRadius: BorderRadius.circular(12),
@@ -421,9 +450,9 @@ class _SpeedWidget extends StatelessWidget {
                 ],
               ],
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }
