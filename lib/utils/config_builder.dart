@@ -111,7 +111,7 @@ class ConfigBuilder {
           'rules': [
             // исключаем свои процессы чтобы не было петли маршрутизации
             {
-              'process_name': ['xray.exe', 'sing-box.exe', 'vpn_client.exe'],
+              'process_name': ['xray.exe', 'sing-box.exe', 'LightningMcQueen.exe'],
               'outbound': 'direct',
             },
             {'action': 'sniff'},

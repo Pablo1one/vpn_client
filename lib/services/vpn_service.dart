@@ -140,23 +140,31 @@ class _WindowsVpnService implements VpnService {
 
   // sing-box не удаляет tun0 при падении — следующий запуск упадёт с "file already exists"
   Future<void> _removeTunAdapter() async {
-    // удаляем все tun* адаптеры (имя может отличаться при крэше)
-    await Process.run(
-      'powershell',
-      [
-        '-Command',
-        r'Get-NetAdapter | Where-Object { $_.Name -like "tun*" } | '
-            r'Remove-NetAdapter -Confirm:$false -ErrorAction SilentlyContinue',
-      ],
-      runInShell: false,
-    );
-    // fallback — netsh
-    await Process.run(
-      'netsh', ['interface', 'delete', 'interface', 'tun0'],
-      runInShell: false,
-    );
+    for (var i = 0; i < 5; i++) {
+      await Process.run(
+        'powershell',
+        [
+          '-Command',
+          r'Get-NetAdapter | Where-Object { $_.Name -like "tun*" } | '
+              r'Remove-NetAdapter -Confirm:$false -ErrorAction SilentlyContinue',
+        ],
+        runInShell: false,
+      );
+      await Process.run(
+        'netsh', ['interface', 'delete', 'interface', 'tun0'],
+        runInShell: false,
+      );
+      await Future.delayed(const Duration(milliseconds: 700));
+      final check = await Process.run(
+        'powershell',
+        ['-Command', r'@(Get-NetAdapter | Where-Object { $_.Name -like "tun*" }).Count'],
+        runInShell: false,
+      );
+      final count = int.tryParse((check.stdout as String).trim()) ?? 1;
+      if (count == 0) break;
+    }
     // ждём пока драйвер WinTun освободит адаптер
-    await Future.delayed(const Duration(milliseconds: 2000));
+    await Future.delayed(const Duration(milliseconds: 1500));
   }
 
   Future<void> _killExistingProcess() async {

@@ -1,17 +1,17 @@
 [Setup]
-AppName=VPN Client
+AppName=LightningMcQueen
 AppVersion=1.0.0
-AppPublisher=vpn_client
-DefaultDirName={autopf}\VPNClient
-DefaultGroupName=VPN Client
+AppPublisher=LightningMcQueen
+DefaultDirName={autopf}\LightningMcQueen
+DefaultGroupName=LightningMcQueen
 OutputDir=D:\vpn_client\installer_output
-OutputBaseFilename=VPNClient-Setup
+OutputBaseFilename=LightningMcQueen-Setup
 Compression=lzma2/ultra64
 SolidCompression=yes
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
-UninstallDisplayName=VPN Client
-UninstallDisplayIcon={app}\vpn_client.exe
+UninstallDisplayName=LightningMcQueen
+UninstallDisplayIcon={app}\LightningMcQueen.exe
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -23,9 +23,9 @@ Name: "desktopicon"; Description: "Create a &desktop icon"; GroupDescription: "A
 Source: "D:\vpn_client\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\VPN Client"; Filename: "{app}\vpn_client.exe"
-Name: "{group}\Uninstall VPN Client"; Filename: "{uninstallexe}"
-Name: "{commondesktop}\VPN Client"; Filename: "{app}\vpn_client.exe"; Tasks: desktopicon
+Name: "{group}\LightningMcQueen"; Filename: "{app}\LightningMcQueen.exe"
+Name: "{group}\Uninstall LightningMcQueen"; Filename: "{uninstallexe}"
+Name: "{commondesktop}\LightningMcQueen"; Filename: "{app}\LightningMcQueen.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\vpn_client.exe"; Description: "Launch VPN Client"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\LightningMcQueen.exe"; Description: "Launch LightningMcQueen"; Flags: nowait postinstall skipifsilent
