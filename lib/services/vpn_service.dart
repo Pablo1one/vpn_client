@@ -133,7 +133,6 @@ class _WindowsVpnService implements VpnService {
 
     await _killXray();
     if (_process == null) {
-      // No tracked process, but we still need to wait for WinTun to release tun0.
       await Future.delayed(const Duration(milliseconds: 1000));
       return;
     }
@@ -153,7 +152,6 @@ class _WindowsVpnService implements VpnService {
           },
         )
         .catchError((_) => -1);
-    // Wait for WinTun to release the tun0 interface before recreating it.
     await Future.delayed(const Duration(milliseconds: 1000));
     try { await _configFile?.delete(); } catch (_) {}
     _configFile = null;
@@ -203,23 +201,17 @@ class _WindowsVpnService implements VpnService {
     final errLines = <String>[];
     bool xrayExited = false;
 
-    proc.stdout.transform(utf8.decoder).transform(const LineSplitter()).listen((_) {});
-    proc.stderr
-        .transform(utf8.decoder)
-        .transform(const LineSplitter())
-        .listen((l) => errLines.add(l));
+    proc.stdout.transform(utf8.decoder).transform(const LineSplitter()).listen((l) => errLines.add(l));
+    proc.stderr.transform(utf8.decoder).transform(const LineSplitter()).listen((l) => errLines.add(l));
 
     proc.exitCode.then((_) => xrayExited = true);
 
-    // Poll TCP 127.0.0.1:10808 until xray is ready (up to 6 s).
-    const maxAttempts = 12;
-    for (var i = 0; i < maxAttempts; i++) {
+    // Poll TCP 127.0.0.1:10808 until xray is ready (up to 8 s).
+    for (var i = 0; i < 16; i++) {
       await Future.delayed(const Duration(milliseconds: 500));
       if (xrayExited) {
-        throw Exception(
-          'xray exited before binding SOCKS5 port.\n'
-          '${errLines.take(5).join('\n')}',
-        );
+        final log = errLines.isNotEmpty ? errLines.take(10).join('\n') : '(нет вывода)';
+        throw Exception('xray завершился до открытия порта:\n$log');
       }
       try {
         final s = await Socket.connect('127.0.0.1', 10808,
@@ -228,10 +220,8 @@ class _WindowsVpnService implements VpnService {
         return;
       } catch (_) {}
     }
-    if (xrayExited) {
-      throw Exception('xray failed to start.\n${errLines.take(5).join('\n')}');
-    }
-    // Proceed anyway — sing-box will retry SOCKS5 connections on its own.
+    final log = errLines.isNotEmpty ? errLines.take(10).join('\n') : '(нет вывода)';
+    throw Exception('xray не открыл порт 10808 за 8 с:\n$log');
   }
 
   @override
@@ -275,32 +265,29 @@ class _WindowsVpnService implements VpnService {
     );
 
     final proc = _process!;
-    bool started = false;
-    final errLines = <String>[];
+    final allLines = <String>[];
     bool exited = false;
 
-    proc.stdout.transform(utf8.decoder).transform(const LineSplitter()).listen((_) {});
-    proc.stderr
-        .transform(utf8.decoder)
-        .transform(const LineSplitter())
-        .listen((l) => errLines.add(l));
+    proc.stdout.transform(utf8.decoder).transform(const LineSplitter()).listen((l) => allLines.add(l));
+    proc.stderr.transform(utf8.decoder).transform(const LineSplitter()).listen((l) => allLines.add(l));
     proc.exitCode.then((_) => exited = true);
 
-    // Poll HTTP proxy port until ready (up to 6 s).
-    for (var i = 0; i < 12; i++) {
+    // Poll HTTP proxy port until ready (up to 8 s).
+    for (var i = 0; i < 16; i++) {
       await Future.delayed(const Duration(milliseconds: 500));
-      if (exited) throw Exception('sing-box exited.\n${errLines.take(3).join('\n')}');
+      if (exited) {
+        final log = allLines.isNotEmpty ? allLines.take(10).join('\n') : '(нет вывода)';
+        throw Exception('sing-box завершился до открытия порта:\n$log');
+      }
       try {
         final s = await Socket.connect('127.0.0.1', 7890,
             timeout: const Duration(milliseconds: 300));
         await s.close();
-        started = true;
-        break;
+        return;
       } catch (_) {}
     }
-    if (!started && !exited) {
-      // Port not open yet — proceed and let the process settle.
-    }
+    final log = allLines.isNotEmpty ? allLines.take(10).join('\n') : '(нет вывода)';
+    throw Exception('sing-box не открыл порт 7890 за 8 с:\n$log');
   }
 
   Future<void> _setSystemProxy() async {
@@ -352,17 +339,11 @@ class _WindowsVpnService implements VpnService {
 
       bool started = false;
       final ready = Completer<void>();
-      final errorLines = <String>[];
+      final allLines = <String>[];
 
       void checkLine(String line) {
         if (line.isEmpty) return;
-        final lower = line.toLowerCase();
-        if (lower.contains('error') ||
-            lower.contains('fatal') ||
-            lower.contains('failed') ||
-            lower.contains('invalid')) {
-          errorLines.add(line.trim());
-        }
+        allLines.add(line.trim());
         if (!started &&
             (line.contains('sing-box started') ||
                 (line.contains('started') && line.contains('inbound/')))) {
@@ -383,26 +364,27 @@ class _WindowsVpnService implements VpnService {
           .listen(checkLine);
 
       proc.exitCode.then((code) {
-        // Ignore exit of a process that was already replaced by a newer connect().
         if (_process != proc) return;
         _controller.add(VpnStatus.disconnected);
         if (!started && !ready.isCompleted) {
-          final detail = errorLines.isNotEmpty
-              ? '\n${errorLines.take(3).join('\n')}'
-              : '';
+          final log = allLines.isNotEmpty
+              ? allLines.take(10).join('\n')
+              : '(нет вывода)';
           ready.completeError(
-            Exception(
-                'sing-box exited (code $code) before connecting$detail'),
-          );
+              Exception('sing-box завершился (код $code):\n$log'));
         }
       });
 
-      // Fall back to "connected" after 5 s if no matching log line appears.
-      Future.delayed(const Duration(seconds: 5), () {
+      // After 25 s without a "started" log line, fail with whatever sing-box output.
+      // First cold start can be slow: WinTun driver init + WFP rules take up to ~20 s.
+      Future.delayed(const Duration(seconds: 25), () {
         if (!started && !ready.isCompleted) {
-          started = true;
-          _controller.add(VpnStatus.connected);
-          ready.complete();
+          final log = allLines.isNotEmpty
+              ? allLines.take(10).join('\n')
+              : '(нет вывода — sing-box не запустился или не имеет прав администратора)';
+          _controller.add(VpnStatus.error);
+          ready.completeError(
+              Exception('sing-box не запустился за 25 с:\n$log'));
         }
       });
 

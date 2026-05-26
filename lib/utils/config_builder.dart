@@ -270,7 +270,8 @@ class ConfigBuilder {
         'mtu': 9000,
         'auto_route': true,
         'strict_route': true,
-        'stack': 'gvisor',
+        'stack': 'mixed',
+        'sniff': true,
         if (excludeIps.isNotEmpty) 'route_exclude_address': excludeIps,
       };
 
@@ -291,7 +292,7 @@ class ConfigBuilder {
             'server': 'local',
           },
         ],
-        'final': 'remote',
+        'final': 'local',
         'independent_cache': true,
       };
 
@@ -323,6 +324,10 @@ class ConfigBuilder {
     }
 
     rules.add({'ip_is_private': true, 'outbound': 'direct'});
+    // Block QUIC (UDP/443): sing-box can't reliably sniff domains from QUIC,
+    // so without this rule traffic falls through to proxy. Blocking forces
+    // browsers to fall back to TCP/TLS, which is always sniffable.
+    rules.add({'network': 'udp', 'port': 443, 'outbound': 'block'});
 
     return {
       'rules': rules,
