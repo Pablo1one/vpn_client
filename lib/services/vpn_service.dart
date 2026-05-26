@@ -162,8 +162,9 @@ class _WindowsVpnService implements VpnService {
   Future<void> _killExistingProcess() async {
     await Process.run('taskkill', ['/F', '/IM', 'sing-box.exe'], runInShell: false);
     await Process.run('taskkill', ['/F', '/IM', 'xray.exe'], runInShell: false);
+    await Process.run('taskkill', ['/F', '/IM', 'amneziawg.exe'], runInShell: false);
     // ждём завершения процессов перед удалением адаптера
-    await Future.delayed(const Duration(milliseconds: 1200));
+    await Future.delayed(const Duration(milliseconds: 1400));
     await _removeTunAdapter();
 
     await _killProxy();
@@ -450,6 +451,7 @@ class _WindowsVpnService implements VpnService {
     } else {
       await _killExistingProcess();
     }
+    await _clearSystemProxy();
     _controller.add(VpnStatus.disconnected);
   }
 

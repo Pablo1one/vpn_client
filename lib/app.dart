@@ -68,8 +68,8 @@ class _ShellState extends State<_Shell> with WindowListener {
   Future<void> _initTray() async {
     final vpn = context.read<VpnProvider>();
     await _tray.init(
-      onConnect: vpn.connect,
       onDisconnect: vpn.disconnect,
+      onExit: _exitApp,
     );
     vpn.addListener(_onVpnChanged);
   }
@@ -77,6 +77,17 @@ class _ShellState extends State<_Shell> with WindowListener {
   void _onVpnChanged() {
     final vpn = context.read<VpnProvider>();
     _tray.updateStatus(vpn.status);
+  }
+
+  Future<void> _exitApp() async {
+    final vpn = context.read<VpnProvider>();
+    if (vpn.isConnected) {
+      try {
+        await vpn.disconnect();
+      } catch (_) {}
+    }
+    await _tray.destroy();
+    exit(0);
   }
 
   @override
@@ -91,9 +102,8 @@ class _ShellState extends State<_Shell> with WindowListener {
 
   @override
   void onWindowClose() async {
-    if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
-      await windowManager.hide();
-    }
+    // Minimize to tray instead of closing
+    await windowManager.hide();
   }
 
   @override
