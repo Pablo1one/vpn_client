@@ -54,6 +54,8 @@ class ProfilesScreen extends StatelessWidget {
       );
 }
 
+// ── Grouped list ──────────────────────────────────────────────────────────────
+
 class _ProfileList extends StatelessWidget {
   final VpnProvider vpn;
   final L10n s;
@@ -61,7 +63,6 @@ class _ProfileList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // группируем по subscriptionUrl
     final groups = <String?, List<VpnProfile>>{};
     for (final p in vpn.profiles) {
       groups.putIfAbsent(p.subscriptionUrl, () => []).add(p);
@@ -69,39 +70,45 @@ class _ProfileList extends StatelessWidget {
     final subUrls = groups.keys.where((k) => k != null).cast<String>().toList();
     final standalone = groups[null] ?? [];
 
-    final items = <Widget>[];
-
-    for (final url in subUrls) {
-      items.add(_SubscriptionHeader(url: url, vpn: vpn, s: s));
-      for (final p in groups[url]!) {
-        items.add(_ProfileTile(
-          profile: p,
-          isActive: vpn.activeProfile?.id == p.id,
-          onTap: () => vpn.selectProfile(p),
-          onDelete: () => _confirmDelete(context, vpn, p, s),
-        ));
-      }
-      items.add(const SizedBox(height: 4));
-    }
-
-    if (standalone.isNotEmpty) {
-      if (subUrls.isNotEmpty) {
-        items.add(_SectionLabel(s.standaloneKeys));
-      }
-      for (final p in standalone) {
-        items.add(_ProfileTile(
-          profile: p,
-          isActive: vpn.activeProfile?.id == p.id,
-          onTap: () => vpn.selectProfile(p),
-          onDelete: () => _confirmDelete(context, vpn, p, s),
-        ));
-      }
-    }
-
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
       children: [
-        for (final w in items) ...[w, if (w is _ProfileTile) const SizedBox(height: 8)],
+        // подписки — каждая в своей карточке-группе
+        for (final url in subUrls) ...[
+          _SubscriptionGroup(
+            url: url,
+            profiles: groups[url]!,
+            vpn: vpn,
+            s: s,
+            onDelete: (p) => _confirmDelete(context, vpn, p, s),
+          ),
+          const SizedBox(height: 12),
+        ],
+        // отдельные ключи
+        if (standalone.isNotEmpty) ...[
+          if (subUrls.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
+              child: Text(
+                s.standaloneKeys.toUpperCase(),
+                style: const TextStyle(
+                  fontSize: 10,
+                  letterSpacing: 1.4,
+                  color: Color(0xFF4A5A6A),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          for (final p in standalone) ...[
+            _ProfileTile(
+              profile: p,
+              isActive: vpn.activeProfile?.id == p.id,
+              onTap: () => vpn.selectProfile(p),
+              onDelete: () => _confirmDelete(context, vpn, p, s),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ],
       ],
     );
   }
@@ -127,85 +134,211 @@ class _ProfileList extends StatelessWidget {
   }
 }
 
-class _SectionLabel extends StatelessWidget {
-  final String title;
-  const _SectionLabel(this.title);
+// ── Subscription group card ───────────────────────────────────────────────────
 
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(4, 12, 4, 6),
-        child: Text(
-          title.toUpperCase(),
-          style: const TextStyle(
-            fontSize: 10,
-            letterSpacing: 1.4,
-            color: Color(0xFF4A5A6A),
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      );
-}
-
-class _SubscriptionHeader extends StatelessWidget {
+class _SubscriptionGroup extends StatelessWidget {
   final String url;
+  final List<VpnProfile> profiles;
   final VpnProvider vpn;
   final L10n s;
-  const _SubscriptionHeader(
-      {required this.url, required this.vpn, required this.s});
+  final void Function(VpnProfile) onDelete;
+
+  const _SubscriptionGroup({
+    required this.url,
+    required this.profiles,
+    required this.vpn,
+    required this.s,
+    required this.onDelete,
+  });
 
   String _shortUrl(String url) {
     try {
       final uri = Uri.parse(url);
       return uri.host.isNotEmpty ? uri.host : url;
     } catch (_) {
-      return url.length > 40 ? '${url.substring(0, 40)}…' : url;
+      return url.length > 48 ? '${url.substring(0, 48)}…' : url;
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final refreshing = vpn.isRefreshing(url);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 8, 0, 4),
-      child: Row(
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF1E1E38)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Icon(Icons.link_rounded, size: 14, color: AppTheme.cyan),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              _shortUrl(url),
-              style: const TextStyle(
-                fontSize: 11,
-                letterSpacing: 0.3,
-                color: AppTheme.cyan,
-                fontWeight: FontWeight.w600,
-              ),
-              overflow: TextOverflow.ellipsis,
+          // ── заголовок подписки ─────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+            child: Row(
+              children: [
+                const Icon(Icons.link_rounded, size: 14, color: AppTheme.cyan),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _shortUrl(url),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppTheme.cyan,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.2,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '${profiles.length}',
+                  style: const TextStyle(
+                      fontSize: 11, color: Color(0xFF4A5A6A)),
+                ),
+                const SizedBox(width: 6),
+                if (refreshing)
+                  const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 1.5, color: AppTheme.cyan),
+                  )
+                else
+                  MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: GestureDetector(
+                      onTap: () => vpn.refreshSubscription(url),
+                      child: Tooltip(
+                        message: s.refreshSubscription,
+                        child: const Padding(
+                          padding: EdgeInsets.all(6),
+                          child: Icon(Icons.refresh_rounded,
+                              size: 18, color: AppTheme.cyan),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
-          if (refreshing)
-            const SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(
-                  strokeWidth: 1.5, color: AppTheme.cyan),
-            )
-          else
-            IconButton(
-              icon: const Icon(Icons.refresh_rounded,
-                  size: 18, color: AppTheme.cyan),
-              tooltip: s.refreshSubscription,
-              onPressed: () => vpn.refreshSubscription(url),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-              visualDensity: VisualDensity.compact,
+          const Divider(height: 1, color: Color(0xFF1A1A2E)),
+          // ── профили внутри ─────────────────────────────────────────────
+          for (int i = 0; i < profiles.length; i++) ...[
+            _InlineProfileTile(
+              profile: profiles[i],
+              isActive: vpn.activeProfile?.id == profiles[i].id,
+              onTap: () => vpn.selectProfile(profiles[i]),
+              onDelete: () => onDelete(profiles[i]),
             ),
-          const SizedBox(width: 4),
+            if (i < profiles.length - 1)
+              const Divider(
+                  height: 1, indent: 56, endIndent: 0,
+                  color: Color(0xFF191929)),
+          ],
         ],
       ),
     );
   }
 }
+
+// ── Inline tile (inside subscription group) ───────────────────────────────────
+
+class _InlineProfileTile extends StatelessWidget {
+  final VpnProfile profile;
+  final bool isActive;
+  final VoidCallback onTap;
+  final VoidCallback onDelete;
+
+  const _InlineProfileTile({
+    required this.profile,
+    required this.isActive,
+    required this.onTap,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(0),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 16,
+                backgroundColor: isActive
+                    ? AppTheme.cyan.withOpacity(0.15)
+                    : const Color(0xFF1A1A2E),
+                child: Icon(
+                  _icon(profile.protocol),
+                  size: 16,
+                  color: isActive ? AppTheme.cyan : const Color(0xFF3A4A5A),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      profile.name,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: isActive
+                            ? AppTheme.cyan
+                            : const Color(0xFFB0C4D8),
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${profile.protocolLabel}  •  ${profile.serverHost}',
+                      style: const TextStyle(
+                          fontSize: 11, color: Color(0xFF4A5A6A)),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              if (isActive)
+                const Padding(
+                  padding: EdgeInsets.only(right: 4),
+                  child: Icon(Icons.check_circle_rounded,
+                      color: AppTheme.cyan, size: 16),
+                ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline,
+                    size: 18, color: Color(0xFF3A4A5A)),
+                onPressed: onDelete,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                visualDensity: VisualDensity.compact,
+              ),
+              const SizedBox(width: 4),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  IconData _icon(VpnProtocol p) => switch (p) {
+        VpnProtocol.vless => Icons.security_rounded,
+        VpnProtocol.wireguard => Icons.vpn_lock_rounded,
+        VpnProtocol.tuic => Icons.bolt_rounded,
+        VpnProtocol.hysteria2 => Icons.speed_rounded,
+        VpnProtocol.amnezia => Icons.shield_rounded,
+      };
+}
+
+// ── Standalone profile card tile ──────────────────────────────────────────────
 
 class _ProfileTile extends StatelessWidget {
   final VpnProfile profile;
@@ -222,51 +355,54 @@ class _ProfileTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      color: isActive ? AppTheme.cyan.withOpacity(0.07) : AppTheme.card,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: isActive
-            ? BorderSide(color: AppTheme.cyan.withOpacity(0.35))
-            : const BorderSide(color: Color(0xFF1E1E38)),
-      ),
-      child: ListTile(
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        leading: CircleAvatar(
-          backgroundColor: isActive
-              ? AppTheme.cyan.withOpacity(0.15)
-              : const Color(0xFF1A1A2E),
-          child: Icon(
-            _icon(profile.protocol),
-            size: 20,
-            color: isActive ? AppTheme.cyan : const Color(0xFF3A4A5A),
-          ),
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: Card(
+        color: isActive ? AppTheme.cyan.withOpacity(0.07) : AppTheme.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: isActive
+              ? BorderSide(color: AppTheme.cyan.withOpacity(0.35))
+              : const BorderSide(color: Color(0xFF1E1E38)),
         ),
-        title: Text(profile.name,
-            style: const TextStyle(fontWeight: FontWeight.w500)),
-        subtitle: Text(
-          '${profile.protocolLabel}  •  ${profile.serverHost}',
-          style: const TextStyle(fontSize: 12, color: Color(0xFF4A5A6A)),
-          overflow: TextOverflow.ellipsis,
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (isActive)
-              Padding(
-                padding: const EdgeInsets.only(right: 4),
-                child: Icon(Icons.check_circle_rounded,
-                    color: AppTheme.cyan, size: 18),
-              ),
-            IconButton(
-              icon: const Icon(Icons.delete_outline,
-                  size: 20, color: Color(0xFF3A4A5A)),
-              onPressed: onDelete,
+        child: ListTile(
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          leading: CircleAvatar(
+            backgroundColor: isActive
+                ? AppTheme.cyan.withOpacity(0.15)
+                : const Color(0xFF1A1A2E),
+            child: Icon(
+              _icon(profile.protocol),
+              size: 20,
+              color: isActive ? AppTheme.cyan : const Color(0xFF3A4A5A),
             ),
-          ],
+          ),
+          title: Text(profile.name,
+              style: const TextStyle(fontWeight: FontWeight.w500)),
+          subtitle: Text(
+            '${profile.protocolLabel}  •  ${profile.serverHost}',
+            style: const TextStyle(fontSize: 12, color: Color(0xFF4A5A6A)),
+            overflow: TextOverflow.ellipsis,
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isActive)
+                Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Icon(Icons.check_circle_rounded,
+                      color: AppTheme.cyan, size: 18),
+                ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline,
+                    size: 20, color: Color(0xFF3A4A5A)),
+                onPressed: onDelete,
+              ),
+            ],
+          ),
+          onTap: onTap,
         ),
-        onTap: onTap,
       ),
     );
   }
