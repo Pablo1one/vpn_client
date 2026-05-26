@@ -71,7 +71,9 @@ class LinkParser {
       // 1. Try JSON (Hiddify JSON with "configs", or sing-box JSON with "outbounds")
       try {
         final json = jsonDecode(body);
-        final profiles = _parseJsonSubscription(json);
+        final profiles = _parseJsonSubscription(json)
+            .map((p) => p.copyWith(subscriptionUrl: url))
+            .toList();
         if (profiles.isNotEmpty) return ParseResult.batch(profiles);
       } catch (_) {}
 
@@ -94,7 +96,9 @@ class LinkParser {
       final profiles = <VpnProfile>[];
       for (final line in lines) {
         final r = parse(line);
-        if (r.profile != null) profiles.add(r.profile!);
+        if (r.profile != null) {
+          profiles.add(r.profile!.copyWith(subscriptionUrl: url));
+        }
       }
 
       if (profiles.isEmpty) {

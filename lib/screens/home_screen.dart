@@ -40,7 +40,10 @@ class HomeScreen extends StatelessWidget {
             const SizedBox(height: 12),
             _SpeedWidget(stream: vpn.speedStream, visible: vpn.isConnected),
             const SizedBox(height: 12),
-            _ProfileLabel(name: vpn.activeProfile?.name),
+            _ProfileLabel(
+              name: vpn.activeProfile?.name,
+              countryCode: vpn.activeCountryCode,
+            ),
             const SizedBox(height: 6),
             if (vpn.activeProfile != null)
               Text(
@@ -135,46 +138,55 @@ class _ConnectButton extends StatelessWidget {
             ? const Color(0xFF3A5060)
             : const Color(0xFF1E2535);
 
+    final button = AnimatedContainer(
+      duration: const Duration(milliseconds: 350),
+      width: 168,
+      height: 168,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: color.withOpacity(connected ? 0.10 : 0.06),
+        border: Border.all(
+          color: color.withOpacity(active ? 0.85 : 0.25),
+          width: connected ? 2.5 : 2,
+        ),
+        boxShadow: connected
+            ? [
+                BoxShadow(
+                  color: AppTheme.purple.withOpacity(0.35),
+                  blurRadius: 44,
+                  spreadRadius: 6,
+                ),
+                BoxShadow(
+                  color: AppTheme.purple.withOpacity(0.15),
+                  blurRadius: 80,
+                  spreadRadius: 16,
+                ),
+              ]
+            : null,
+      ),
+      child: Icon(
+        Icons.power_settings_new_rounded,
+        size: 68,
+        color: color.withOpacity(active ? 1 : 0.3),
+      ),
+    );
+
     return GestureDetector(
       onTap: active ? onTap : null,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 350),
-        width: 168,
-        height: 168,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: color.withOpacity(connected ? 0.10 : 0.06),
-          border: Border.all(
-            color: color.withOpacity(active ? 0.85 : 0.25),
-            width: connected ? 2.5 : 2,
-          ),
-          boxShadow: connected
-              ? [
-                  BoxShadow(
-                    color: AppTheme.purple.withOpacity(0.35),
-                    blurRadius: 44,
-                    spreadRadius: 6,
-                  ),
-                  BoxShadow(
-                    color: AppTheme.purple.withOpacity(0.15),
-                    blurRadius: 80,
-                    spreadRadius: 16,
-                  ),
-                ]
-              : null,
-        ),
-        child: busy
-            ? const Center(
-                child: CircularProgressIndicator(
-                  color: Color(0xFFFFB300),
-                  strokeWidth: 2.5,
-                ),
-              )
-            : Icon(
-                Icons.power_settings_new_rounded,
-                size: 68,
-                color: color.withOpacity(active ? 1 : 0.3),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          if (busy)
+            const SizedBox(
+              width: 186,
+              height: 186,
+              child: CircularProgressIndicator(
+                color: AppTheme.cyan,
+                strokeWidth: 3,
               ),
+            ),
+          button,
+        ],
       ),
     );
   }
@@ -184,13 +196,25 @@ class _ConnectButton extends StatelessWidget {
 
 class _ProfileLabel extends StatelessWidget {
   final String? name;
-  const _ProfileLabel({this.name});
+  final String? countryCode;
+  const _ProfileLabel({this.name, this.countryCode});
+
+  static String? _flag(String? cc) {
+    if (cc == null || cc.length != 2) return null;
+    return cc.toUpperCase().runes
+        .map((r) => String.fromCharCode(0x1F1E0 + r - 65))
+        .join();
+  }
 
   @override
   Widget build(BuildContext context) {
     final s = L10n.of(context);
+    final flag = _flag(countryCode);
+    final displayName = name != null && flag != null
+        ? '$flag  $name'
+        : name ?? s.noProfile;
     return Text(
-      name ?? s.noProfile,
+      displayName,
       style: TextStyle(
         fontSize: 15,
         fontWeight: name != null ? FontWeight.w500 : FontWeight.normal,

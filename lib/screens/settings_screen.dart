@@ -8,6 +8,7 @@ import '../services/update_service.dart';
 import '../utils/config_builder.dart';
 import '../l10n/strings.dart';
 import '../theme.dart';
+import 'logs_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -64,6 +65,21 @@ class SettingsScreen extends StatelessWidget {
           // ── Updates ──────────────────────────────────────────────────────
           _SectionHeader(s.updates),
           const _UpdateTile(),
+          const Divider(height: 1),
+
+          // ── Logs ─────────────────────────────────────────────────────────
+          _SectionHeader(s.logs),
+          ListTile(
+            leading: const Icon(Icons.receipt_long_outlined,
+                size: 20, color: Color(0xFF5A6480)),
+            title: Text(s.logsTitle),
+            trailing: const Icon(Icons.chevron_right,
+                size: 20, color: Color(0xFF5A6480)),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const LogsScreen()),
+            ),
+          ),
           const Divider(height: 1),
 
           // ── Language ─────────────────────────────────────────────────────

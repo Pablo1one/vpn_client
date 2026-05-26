@@ -67,6 +67,12 @@ class ConfigBuilder {
   // tun форвардер: только ipv4 tun → socks5 10808
   static Map<String, dynamic> buildTun() => {
         'log': {'level': 'info'},
+        'experimental': {
+          'clash_api': {
+            'external_controller': '127.0.0.1:9090',
+            'secret': '',
+          },
+        },
         'dns': {
           'servers': [
             {'address': '8.8.8.8', 'detour': 'direct', 'tag': 'dns'},
@@ -105,7 +111,7 @@ class ConfigBuilder {
           'rules': [
             // исключаем свои процессы чтобы не было петли маршрутизации
             {
-              'process_name': ['xray.exe', 'sing-box.exe'],
+              'process_name': ['xray.exe', 'sing-box.exe', 'vpn_client.exe'],
               'outbound': 'direct',
             },
             {'action': 'sniff'},

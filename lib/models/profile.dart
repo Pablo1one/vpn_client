@@ -8,6 +8,7 @@ class VpnProfile {
   final VpnProtocol protocol;
   final Map<String, dynamic> config;
   final DateTime createdAt;
+  final String? subscriptionUrl;
 
   const VpnProfile({
     required this.id,
@@ -15,7 +16,17 @@ class VpnProfile {
     required this.protocol,
     required this.config,
     required this.createdAt,
+    this.subscriptionUrl,
   });
+
+  VpnProfile copyWith({String? subscriptionUrl}) => VpnProfile(
+        id: id,
+        name: name,
+        protocol: protocol,
+        config: config,
+        createdAt: createdAt,
+        subscriptionUrl: subscriptionUrl ?? this.subscriptionUrl,
+      );
 
   static String generateId() {
     final rng = Random.secure();
@@ -32,6 +43,7 @@ class VpnProfile {
         'protocol': protocol.name,
         'config': config,
         'createdAt': createdAt.toIso8601String(),
+        if (subscriptionUrl != null) 'subscriptionUrl': subscriptionUrl,
       };
 
   factory VpnProfile.fromJson(Map<String, dynamic> json) => VpnProfile(
@@ -43,15 +55,35 @@ class VpnProfile {
         ),
         config: Map<String, dynamic>.from(json['config'] as Map),
         createdAt: DateTime.parse(json['createdAt'] as String),
+        subscriptionUrl: json['subscriptionUrl'] as String?,
       );
 
-  String get protocolLabel => switch (protocol) {
-        VpnProtocol.vless => 'VLESS + Reality',
+  String get protocolLabel {
+    if (protocol != VpnProtocol.vless) {
+      return switch (protocol) {
         VpnProtocol.wireguard => 'WireGuard',
         VpnProtocol.tuic => 'TUIC',
         VpnProtocol.hysteria2 => 'Hysteria2',
         VpnProtocol.amnezia => 'AmneziaWG',
+        _ => 'VLESS',
       };
+    }
+    final transport = config['transport'] as String? ?? 'tcp';
+    final security = config['security'] as String? ?? 'none';
+    final sec = switch (security) {
+      'reality' => ' • Reality',
+      'tls' => ' • TLS',
+      _ => '',
+    };
+    final tr = switch (transport) {
+      'ws' => 'WS',
+      'grpc' => 'gRPC',
+      'xhttp' => 'xHTTP',
+      'httpupgrade' || 'http' => 'HTTP',
+      _ => 'TCP',
+    };
+    return 'VLESS $tr$sec';
+  }
 
   String get serverHost => switch (protocol) {
         VpnProtocol.vless ||

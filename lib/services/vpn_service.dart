@@ -4,6 +4,8 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 
+import 'log_service.dart';
+
 enum VpnStatus { disconnected, connecting, connected, disconnecting, error }
 
 abstract class VpnService {
@@ -199,8 +201,14 @@ class _WindowsVpnService implements VpnService {
     final errLines = <String>[];
     bool exited = false;
 
-    proc.stdout.transform(utf8.decoder).transform(const LineSplitter()).listen((l) => errLines.add(l));
-    proc.stderr.transform(utf8.decoder).transform(const LineSplitter()).listen((l) => errLines.add(l));
+    proc.stdout.transform(utf8.decoder).transform(const LineSplitter()).listen((l) {
+      errLines.add(l);
+      LogService().add('[proxy] $l');
+    });
+    proc.stderr.transform(utf8.decoder).transform(const LineSplitter()).listen((l) {
+      errLines.add(l);
+      LogService().add('[proxy] $l');
+    });
     proc.exitCode.then((_) => exited = true);
 
     // ждём открытия порта 10808 до 8 с
@@ -256,12 +264,18 @@ class _WindowsVpnService implements VpnService {
     _outSub = proc.stdout
         .transform(utf8.decoder)
         .transform(const LineSplitter())
-        .listen(checkLine);
+        .listen((line) {
+          checkLine(line);
+          LogService().add('[tun] $line');
+        });
 
     _errSub = proc.stderr
         .transform(utf8.decoder)
         .transform(const LineSplitter())
-        .listen(checkLine);
+        .listen((line) {
+          checkLine(line);
+          LogService().add('[tun] $line');
+        });
 
     proc.exitCode.then((code) {
       if (_process != proc) return;
