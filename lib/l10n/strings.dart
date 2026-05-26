@@ -58,6 +58,9 @@ class L10n {
   final String refreshSubscription;
   final String standaloneKeys;
   final String subscriptionLabel;
+  final String themeSection;
+  final String themeJackson;
+  final String themeMcQueen;
 
   const L10n._({
     required this.appName,
@@ -115,6 +118,9 @@ class L10n {
     required this.refreshSubscription,
     required this.standaloneKeys,
     required this.subscriptionLabel,
+    required this.themeSection,
+    required this.themeJackson,
+    required this.themeMcQueen,
   }) : _foundProfiles = foundProfiles;
 
   String foundProfiles(int n) => _foundProfiles.replaceAll('{n}', '$n');
@@ -125,7 +131,7 @@ class L10n {
   }
 
   static const en = L10n._(
-    appName: 'VPN Client',
+    appName: 'McQueen Speed Booster',
     vpnTab: 'VPN',
     profilesTab: 'Keys',
     settingsTab: 'Settings',
@@ -181,10 +187,13 @@ class L10n {
     refreshSubscription: 'Refresh',
     standaloneKeys: 'Standalone keys',
     subscriptionLabel: 'Subscription',
+    themeSection: 'Theme',
+    themeJackson: 'Jackson Storm',
+    themeMcQueen: 'Lightning McQueen',
   );
 
   static const ru = L10n._(
-    appName: 'VPN Клиент',
+    appName: 'McQueen Ускоритель интернета',
     vpnTab: 'VPN',
     profilesTab: 'Ключи',
     settingsTab: 'Настройки',
@@ -240,5 +249,8 @@ class L10n {
     refreshSubscription: 'Обновить',
     standaloneKeys: 'Отдельные ключи',
     subscriptionLabel: 'Подписка',
+    themeSection: 'Тема',
+    themeJackson: 'Jackson Storm',
+    themeMcQueen: 'Lightning McQueen',
   );
 }
