@@ -14,8 +14,8 @@ class CdnScreen extends StatelessWidget {
     final s = L10n.of(context);
     final c = context.ac;
 
-    final connected = vpn.isConnected;
-    final busy = vpn.isBusy;
+    final connected = vpn.warpActive && vpn.isConnected;
+    final busy = vpn.warpActive && vpn.isBusy;
 
     return Scaffold(
       appBar: AppBar(title: Text(s.cdnTitle)),

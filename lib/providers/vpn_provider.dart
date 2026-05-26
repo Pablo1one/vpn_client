@@ -27,6 +27,8 @@ class VpnProvider extends ChangeNotifier {
   List<String> _excludedApps = [];
   String? _error;
 
+  bool _warpActive = false;
+
   final _countryCache = <String, String>{};
   String? _activeCountryCode;
   final _refreshing = <String>{};  // urls currently being refreshed
@@ -41,6 +43,7 @@ class VpnProvider extends ChangeNotifier {
   String? get error => _error;
   DateTime? get connectedAt => _connectedAt;
   bool get isConnected => _status == VpnStatus.connected;
+  bool get warpActive => _warpActive;
   Stream<SpeedData> get speedStream => _speed.stream;
   bool get isBusy =>
       _status == VpnStatus.connecting || _status == VpnStatus.disconnecting;
@@ -92,6 +95,7 @@ class VpnProvider extends ChangeNotifier {
   Future<void> connect() async {
     if (_activeProfile == null) return;
     _error = null;
+    _warpActive = false;
     _status = VpnStatus.connecting;
     notifyListeners();
     try {
@@ -162,6 +166,7 @@ class VpnProvider extends ChangeNotifier {
 
   Future<void> connectWarp() async {
     _error = null;
+    _warpActive = true;  // устанавливаем до подключения — CDN показывает спиннер
     _status = VpnStatus.connecting;
     notifyListeners();
     try {
@@ -169,6 +174,7 @@ class VpnProvider extends ChangeNotifier {
       config ??= await WarpService.register();
       await _vpn.connectAwg(config.toWgConf());
     } catch (e) {
+      _warpActive = false;
       _status = VpnStatus.error;
       _error = e.toString();
       notifyListeners();
@@ -181,6 +187,7 @@ class VpnProvider extends ChangeNotifier {
   }
 
   Future<void> disconnect() async {
+    _warpActive = false;
     _status = VpnStatus.disconnecting;
     notifyListeners();
     await _vpn.disconnect();

@@ -1,3 +1,4 @@
+import 'package:country_flags/country_flags.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/vpn_provider.dart';
@@ -308,22 +309,9 @@ class _ProfileLabel extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (cc != null && cc.length == 2) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-              decoration: BoxDecoration(
-                color: c.primary.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: c.primary.withOpacity(0.35)),
-              ),
-              child: Text(
-                cc,
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                  color: c.primary,
-                  letterSpacing: 0.8,
-                ),
-              ),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(3),
+              child: CountryFlag.fromCountryCode(cc, width: 24, height: 16),
             ),
             const SizedBox(width: 8),
           ],
