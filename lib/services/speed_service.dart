@@ -11,10 +11,11 @@ class SpeedData {
   static const empty = SpeedData();
 }
 
-/// Connects to sing-box Clash API (:9090) for real-time traffic,
-/// and measures TCP ping to 1.1.1.1:53 every 5 seconds.
+/// Подключается к Clash API sing-box (:9090) для трафика и пинга.
+/// Пинг измеряется через /proxies/proxy/delay — реальная задержка через VPN.
 class SpeedService {
   static const _apiBase = 'http://127.0.0.1:9090';
+  static const _pingUrl = 'http://cp.cloudflare.com/generate_204';
 
   final _controller = StreamController<SpeedData>.broadcast();
   http.Client? _client;
@@ -28,8 +29,8 @@ class SpeedService {
     if (_active) return;
     _active = true;
     _connectTrafficStream();
-    _pingTimer = Timer.periodic(const Duration(seconds: 5), (_) => _updatePing());
     _updatePing();
+    _pingTimer = Timer.periodic(const Duration(seconds: 15), (_) => _updatePing());
   }
 
   void stop() {
@@ -38,9 +39,8 @@ class SpeedService {
     _client = null;
     _pingTimer?.cancel();
     _pingTimer = null;
-    if (!_controller.isClosed) {
-      _controller.add(SpeedData.empty);
-    }
+    _pingMs = -1;
+    if (!_controller.isClosed) _controller.add(SpeedData.empty);
   }
 
   Future<void> _connectTrafficStream() async {
@@ -74,15 +74,23 @@ class SpeedService {
   }
 
   Future<void> _updatePing() async {
-    final sw = Stopwatch()..start();
+    if (!_active) return;
     try {
-      final socket = await Socket.connect(
-        '1.1.1.1', 53,
-        timeout: const Duration(seconds: 3),
-      );
-      sw.stop();
-      socket.destroy();
-      _pingMs = sw.elapsedMilliseconds;
+      final c = http.Client();
+      try {
+        final resp = await c
+            .get(Uri.parse(
+                '$_apiBase/proxies/proxy/delay?timeout=5000&url=$_pingUrl'))
+            .timeout(const Duration(seconds: 6));
+        if (resp.statusCode == 200) {
+          final j = jsonDecode(resp.body) as Map<String, dynamic>;
+          _pingMs = (j['delay'] as num? ?? -1).toInt();
+        } else {
+          _pingMs = -1;
+        }
+      } finally {
+        c.close();
+      }
     } catch (_) {
       _pingMs = -1;
     }

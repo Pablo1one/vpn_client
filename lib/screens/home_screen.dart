@@ -14,7 +14,6 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final vpn = context.watch<VpnProvider>();
-    // Listen to language changes to rebuild labels
     context.watch<LanguageProvider>();
     final s = L10n.of(context);
 
@@ -48,8 +47,7 @@ class HomeScreen extends StatelessWidget {
             if (vpn.activeProfile != null)
               Text(
                 vpn.activeProfile!.protocolLabel,
-                style: const TextStyle(
-                    fontSize: 12, color: Color(0xFF4A5A6A)),
+                style: const TextStyle(fontSize: 12, color: Color(0xFF4A5A6A)),
               ),
             const SizedBox(height: 8),
             _RoutingBadge(vpn: vpn),
@@ -74,7 +72,7 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-// ── Status badge ─────────────────────────────────────────────────────────────
+// ── Status badge ──────────────────────────────────────────────────────────────
 
 class _StatusBadge extends StatelessWidget {
   final VpnStatus status;
@@ -85,8 +83,8 @@ class _StatusBadge extends StatelessWidget {
     final s = L10n.of(context);
     final (label, color) = switch (status) {
       VpnStatus.connected => (s.connected, AppTheme.cyan),
-      VpnStatus.connecting => (s.connecting, const Color(0xFFFFB300)),
-      VpnStatus.disconnecting => (s.disconnecting, const Color(0xFFFFB300)),
+      VpnStatus.connecting => (s.connecting, const Color(0xFF00AAFF)),
+      VpnStatus.disconnecting => (s.disconnecting, const Color(0xFF00AAFF)),
       VpnStatus.error => (s.error, const Color(0xFFFF4560)),
       _ => (s.disconnected, const Color(0xFF3A4A5A)),
     };
@@ -114,7 +112,7 @@ class _StatusBadge extends StatelessWidget {
 
 // ── Connect button ────────────────────────────────────────────────────────────
 
-class _ConnectButton extends StatelessWidget {
+class _ConnectButton extends StatefulWidget {
   final VpnStatus status;
   final bool hasProfile;
   final VoidCallback? onTap;
@@ -126,11 +124,62 @@ class _ConnectButton extends StatelessWidget {
   });
 
   @override
+  State<_ConnectButton> createState() => _ConnectButtonState();
+}
+
+class _ConnectButtonState extends State<_ConnectButton>
+    with TickerProviderStateMixin {
+  late final AnimationController _spin;
+  late final AnimationController _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _spin = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    );
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    _updateAnimation();
+  }
+
+  @override
+  void didUpdateWidget(_ConnectButton old) {
+    super.didUpdateWidget(old);
+    _updateAnimation();
+  }
+
+  bool get _busy =>
+      widget.status == VpnStatus.connecting ||
+      widget.status == VpnStatus.disconnecting;
+
+  void _updateAnimation() {
+    if (_busy) {
+      if (!_spin.isAnimating) _spin.repeat();
+      if (!_pulse.isAnimating) _pulse.repeat(reverse: true);
+    } else {
+      _spin.stop();
+      _spin.value = 0;
+      _pulse.stop();
+      _pulse.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _spin.dispose();
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final connected = status == VpnStatus.connected;
-    final busy =
-        status == VpnStatus.connecting || status == VpnStatus.disconnecting;
-    final active = hasProfile && !busy;
+    final connected = widget.status == VpnStatus.connected;
+    final busy = _busy;
+    final active = widget.hasProfile && !busy;
 
     final color = connected
         ? AppTheme.purple
@@ -171,25 +220,71 @@ class _ConnectButton extends StatelessWidget {
       ),
     );
 
-    return GestureDetector(
-      onTap: active ? onTap : null,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          if (busy)
-            const SizedBox(
-              width: 186,
-              height: 186,
-              child: CircularProgressIndicator(
-                color: AppTheme.cyan,
-                strokeWidth: 3,
-              ),
-            ),
-          button,
-        ],
+    return MouseRegion(
+      cursor: active ? SystemMouseCursors.click : MouseCursor.defer,
+      child: GestureDetector(
+        onTap: active ? widget.onTap : null,
+        child: AnimatedBuilder(
+          animation: Listenable.merge([_spin, _pulse]),
+          builder: (_, __) {
+            return Stack(
+              alignment: Alignment.center,
+              children: [
+                if (busy) ...[
+                  // внешнее пульсирующее кольцо
+                  SizedBox(
+                    width: 200 + _pulse.value * 12,
+                    height: 200 + _pulse.value * 12,
+                    child: CircularProgressIndicator(
+                      value: null,
+                      color: AppTheme.cyan.withOpacity(0.18 + _pulse.value * 0.15),
+                      strokeWidth: 1.5,
+                    ),
+                  ),
+                  // основное кольцо
+                  Transform.rotate(
+                    angle: _spin.value * 6.2832,
+                    child: SizedBox(
+                      width: 188,
+                      height: 188,
+                      child: CustomPaint(
+                        painter: _ArcPainter(AppTheme.cyan),
+                      ),
+                    ),
+                  ),
+                ],
+                button,
+              ],
+            );
+          },
+        ),
       ),
     );
   }
+}
+
+/// Рисует дугу ~270° с градиентом от прозрачного к cyan
+class _ArcPainter extends CustomPainter {
+  final Color color;
+  const _ArcPainter(this.color);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Rect.fromLTWH(3, 3, size.width - 6, size.height - 6);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.0
+      ..strokeCap = StrokeCap.round
+      ..shader = SweepGradient(
+        colors: [color.withOpacity(0), color],
+        startAngle: 0,
+        endAngle: 4.71,
+      ).createShader(rect);
+    canvas.drawArc(rect, -1.57, 4.71, false, paint);
+  }
+
+  @override
+  bool shouldRepaint(_ArcPainter old) => old.color != color;
 }
 
 // ── Profile label ─────────────────────────────────────────────────────────────
@@ -209,19 +304,39 @@ class _ProfileLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = L10n.of(context);
+    if (name == null) {
+      return Text(
+        s.noProfile,
+        style: const TextStyle(fontSize: 15, color: Color(0xFF3A4A5A)),
+      );
+    }
     final flag = _flag(countryCode);
-    final displayName = name != null && flag != null
-        ? '$flag  $name'
-        : name ?? s.noProfile;
-    return Text(
-      displayName,
-      style: TextStyle(
-        fontSize: 15,
-        fontWeight: name != null ? FontWeight.w500 : FontWeight.normal,
-        color: name != null
-            ? const Color(0xFFB0C4D8)
-            : const Color(0xFF3A4A5A),
-      ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (flag != null) ...[
+          Text(flag, style: const TextStyle(fontSize: 18)),
+          const SizedBox(width: 6),
+          Text(
+            countryCode!.toUpperCase(),
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF6A8AA0),
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(width: 10),
+        ],
+        Text(
+          name!,
+          style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+            color: Color(0xFFB0C4D8),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -276,8 +391,7 @@ class _SpeedWidget extends StatelessWidget {
           opacity: visible ? 1 : 0,
           duration: const Duration(milliseconds: 400),
           child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
               color: AppTheme.surface,
               borderRadius: BorderRadius.circular(12),
@@ -363,9 +477,7 @@ class _RoutingBadge extends StatelessWidget {
       child: Text(
         label,
         style: const TextStyle(
-            fontSize: 11,
-            color: AppTheme.cyan,
-            letterSpacing: 0.3),
+            fontSize: 11, color: AppTheme.cyan, letterSpacing: 0.3),
       ),
     );
   }
