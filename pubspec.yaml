@@ -18,6 +18,7 @@ dependencies:
   package_info_plus: ^8.1.0
   url_launcher: ^6.3.0
   file_picker: ^8.1.7
+  country_flags: ^3.0.0
 
 dev_dependencies:
   flutter_test:
