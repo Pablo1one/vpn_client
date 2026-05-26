@@ -49,6 +49,15 @@ class L10n {
   final String upToDate;
   final String updateAvailable;
   final String download;
+  final String logs;
+  final String logsTitle;
+  final String clearLogs;
+  final String copyLogs;
+  final String logsCopied;
+  final String noLogs;
+  final String refreshSubscription;
+  final String standaloneKeys;
+  final String subscriptionLabel;
 
   const L10n._({
     required this.appName,
@@ -97,6 +106,15 @@ class L10n {
     required this.upToDate,
     required this.updateAvailable,
     required this.download,
+    required this.logs,
+    required this.logsTitle,
+    required this.clearLogs,
+    required this.copyLogs,
+    required this.logsCopied,
+    required this.noLogs,
+    required this.refreshSubscription,
+    required this.standaloneKeys,
+    required this.subscriptionLabel,
   }) : _foundProfiles = foundProfiles;
 
   String foundProfiles(int n) => _foundProfiles.replaceAll('{n}', '$n');
@@ -109,7 +127,7 @@ class L10n {
   static const en = L10n._(
     appName: 'VPN Client',
     vpnTab: 'VPN',
-    profilesTab: 'Profiles',
+    profilesTab: 'Keys',
     settingsTab: 'Settings',
     connected: 'Connected',
     connecting: 'Connecting…',
@@ -132,16 +150,15 @@ class L10n {
     excludedApps: 'Excluded apps',
     noExcludedApps: 'None — all apps through VPN',
     language: 'Language',
-    importProfile: 'Import profile',
-    importHint:
-        'Paste a link or subscription URL:\n\nvless://...\ntuic://...\nhysteria2://...\nvpn://... (Amnezia)\nhttps://sub.example.com/...',
-    saveProfile: 'Save profile',
+    importProfile: 'Add',
+    importHint: 'Paste a link or subscription URL…',
+    saveProfile: 'Save',
     pasteBtn: 'Paste',
     fetchingUrl: 'Fetching…',
     foundProfiles: 'Found {n} profiles',
     importAll: 'Import all',
-    noProfiles: 'No profiles yet',
-    deleteProfile: 'Delete profile?',
+    noProfiles: 'No keys yet',
+    deleteProfile: 'Delete?',
     cancel: 'Cancel',
     delete: 'Delete',
     unrecognizedFormat:
@@ -155,12 +172,21 @@ class L10n {
     upToDate: 'Up to date',
     updateAvailable: 'Update available',
     download: 'Download',
+    logs: 'Logs',
+    logsTitle: 'Logs',
+    clearLogs: 'Clear',
+    copyLogs: 'Copy',
+    logsCopied: 'Copied',
+    noLogs: 'No logs yet',
+    refreshSubscription: 'Refresh',
+    standaloneKeys: 'Standalone keys',
+    subscriptionLabel: 'Subscription',
   );
 
   static const ru = L10n._(
     appName: 'VPN Клиент',
     vpnTab: 'VPN',
-    profilesTab: 'Профили',
+    profilesTab: 'Ключи',
     settingsTab: 'Настройки',
     connected: 'Подключено',
     connecting: 'Подключение…',
@@ -183,16 +209,15 @@ class L10n {
     excludedApps: 'Исключённые приложения',
     noExcludedApps: 'Нет — все приложения через VPN',
     language: 'Язык',
-    importProfile: 'Импорт профиля',
-    importHint:
-        'Вставьте ссылку или URL подписки:\n\nvless://...\ntuic://...\nhysteria2://...\nvpn://... (Amnezia)\nhttps://sub.example.com/...',
-    saveProfile: 'Сохранить профиль',
+    importProfile: 'Добавить',
+    importHint: 'Вставьте ссылку или URL подписки…',
+    saveProfile: 'Сохранить',
     pasteBtn: 'Вставить',
     fetchingUrl: 'Загрузка…',
-    foundProfiles: 'Найдено профилей: {n}',
-    importAll: 'Импортировать все',
-    noProfiles: 'Профилей пока нет',
-    deleteProfile: 'Удалить профиль?',
+    foundProfiles: 'Найдено ключей: {n}',
+    importAll: 'Добавить все',
+    noProfiles: 'Ключей пока нет',
+    deleteProfile: 'Удалить?',
     cancel: 'Отмена',
     delete: 'Удалить',
     unrecognizedFormat:
@@ -206,5 +231,14 @@ class L10n {
     upToDate: 'Установлена последняя версия',
     updateAvailable: 'Доступно обновление',
     download: 'Скачать',
+    logs: 'Логи',
+    logsTitle: 'Логи',
+    clearLogs: 'Очистить',
+    copyLogs: 'Скопировать',
+    logsCopied: 'Скопировано',
+    noLogs: 'Логов пока нет',
+    refreshSubscription: 'Обновить',
+    standaloneKeys: 'Отдельные ключи',
+    subscriptionLabel: 'Подписка',
   );
 }

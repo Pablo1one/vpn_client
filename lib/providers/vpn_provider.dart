@@ -1,12 +1,15 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/profile.dart';
 import '../services/profile_repository.dart';
 import '../services/speed_service.dart';
 import '../services/vpn_service.dart';
 import '../utils/config_builder.dart';
+import '../utils/link_parser.dart';
 
 class VpnProvider extends ChangeNotifier {
   final _repo = ProfileRepository();
@@ -23,6 +26,10 @@ class VpnProvider extends ChangeNotifier {
   List<String> _excludedApps = [];
   String? _error;
 
+  final _countryCache = <String, String>{};
+  String? _activeCountryCode;
+  final _refreshing = <String>{};  // urls currently being refreshed
+
   VpnStatus get status => _status;
   VpnProfile? get activeProfile => _activeProfile;
   List<VpnProfile> get profiles => List.from(_profiles);
@@ -36,6 +43,8 @@ class VpnProvider extends ChangeNotifier {
   Stream<SpeedData> get speedStream => _speed.stream;
   bool get isBusy =>
       _status == VpnStatus.connecting || _status == VpnStatus.disconnecting;
+  String? get activeCountryCode => _activeCountryCode;
+  bool isRefreshing(String url) => _refreshing.contains(url);
 
   Future<void> init() async {
     try {
@@ -73,6 +82,7 @@ class VpnProvider extends ChangeNotifier {
     if (lastId != null) {
       try {
         _activeProfile = _profiles.firstWhere((p) => p.id == lastId);
+        if (_activeProfile != null) _fetchCountry(_activeProfile!.serverHost);
       } catch (_) {}
     }
     notifyListeners();
@@ -180,10 +190,67 @@ class VpnProvider extends ChangeNotifier {
   Future<void> selectProfile(VpnProfile profile) async {
     final wasConnected = isConnected;
     _activeProfile = profile;
+    _activeCountryCode = _countryCache[profile.serverHost];
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('lastProfileId', profile.id);
     notifyListeners();
+    _fetchCountry(profile.serverHost);
     if (wasConnected) await connect();
+  }
+
+  Future<void> refreshSubscription(String url) async {
+    if (_refreshing.contains(url)) return;
+    _refreshing.add(url);
+    notifyListeners();
+    try {
+      final result = await LinkParser.parseSubscriptionUrl(url);
+      if (result.batch != null && result.batch!.isNotEmpty) {
+        final toRemove = _profiles.where((p) => p.subscriptionUrl == url).map((p) => p.id).toList();
+        final activeRemoved = toRemove.contains(_activeProfile?.id);
+        for (final id in toRemove) {
+          await _repo.remove(id);
+        }
+        if (activeRemoved) _activeProfile = null;
+        for (final p in result.batch!) {
+          await _repo.add(p);
+        }
+        _profiles = _repo.getAll().toList();
+      }
+    } finally {
+      _refreshing.remove(url);
+      notifyListeners();
+    }
+  }
+
+  void _fetchCountry(String host) {
+    if (host.isEmpty) return;
+    if (_countryCache.containsKey(host)) {
+      if (_activeCountryCode != _countryCache[host]) {
+        _activeCountryCode = _countryCache[host];
+        notifyListeners();
+      }
+      return;
+    }
+    _doFetchCountry(host);
+  }
+
+  Future<void> _doFetchCountry(String host) async {
+    try {
+      final resp = await http
+          .get(Uri.parse('http://ip-api.com/json/$host?fields=countryCode'))
+          .timeout(const Duration(seconds: 6));
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        final code = data['countryCode'] as String?;
+        if (code != null && code.isNotEmpty) {
+          _countryCache[host] = code;
+          if (_activeProfile?.serverHost == host) {
+            _activeCountryCode = code;
+            notifyListeners();
+          }
+        }
+      }
+    } catch (_) {}
   }
 
   Future<void> setKillSwitch(bool value) async {
