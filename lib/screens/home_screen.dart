@@ -222,31 +222,35 @@ class _ConnectButtonState extends State<_ConnectButton>
       cursor: active ? SystemMouseCursors.click : MouseCursor.defer,
       child: GestureDetector(
         onTap: active ? widget.onTap : null,
-        child: AnimatedBuilder(
-          animation: Listenable.merge([_spin, _pulse]),
-          builder: (_, __) => Stack(
-            alignment: Alignment.center,
-            children: [
-              if (busy) ...[
-                SizedBox(
-                  width: 200 + _pulse.value * 14,
-                  height: 200 + _pulse.value * 14,
-                  child: CircularProgressIndicator(
-                    value: null,
-                    color: c.primary.withOpacity(0.15 + _pulse.value * 0.18),
-                    strokeWidth: 1.5,
+        child: SizedBox(
+          width: 220,
+          height: 220,
+          child: AnimatedBuilder(
+            animation: Listenable.merge([_spin, _pulse]),
+            builder: (_, __) => Stack(
+              alignment: Alignment.center,
+              children: [
+                if (busy) ...[
+                  SizedBox(
+                    width: 200 + _pulse.value * 14,
+                    height: 200 + _pulse.value * 14,
+                    child: CircularProgressIndicator(
+                      value: null,
+                      color: c.primary.withOpacity(0.15 + _pulse.value * 0.18),
+                      strokeWidth: 1.5,
+                    ),
                   ),
-                ),
-                Transform.rotate(
-                  angle: _spin.value * 6.2832,
-                  child: SizedBox(
-                    width: 188, height: 188,
-                    child: CustomPaint(painter: _ArcPainter(c.primary)),
+                  Transform.rotate(
+                    angle: _spin.value * 6.2832,
+                    child: SizedBox(
+                      width: 188, height: 188,
+                      child: CustomPaint(painter: _ArcPainter(c.primary)),
+                    ),
                   ),
-                ),
+                ],
+                button,
               ],
-              button,
-            ],
+            ),
           ),
         ),
       ),
@@ -286,51 +290,56 @@ class _ProfileLabel extends StatelessWidget {
   final String? countryCode;
   const _ProfileLabel({this.name, this.countryCode});
 
-  static String? _flag(String? cc) {
-    if (cc == null || cc.length != 2) return null;
-    return cc.toUpperCase().runes
-        .map((r) => String.fromCharCode(0x1F1E6 + r - 65))
-        .join();
-  }
-
   @override
   Widget build(BuildContext context) {
     final c = context.ac;
     final s = L10n.of(context);
     if (name == null) {
-      return Text(s.noProfile,
-          style: TextStyle(fontSize: 15, color: c.textMuted));
+      return SizedBox(
+        height: 24,
+        child: Text(s.noProfile,
+            style: TextStyle(fontSize: 15, color: c.textMuted)),
+      );
     }
-    final flag = _flag(countryCode);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (flag != null) ...[
-          Text(flag, style: const TextStyle(fontSize: 18)),
-          const SizedBox(width: 6),
-          Text(
-            countryCode!.toUpperCase(),
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: c.textSecondary,
-              letterSpacing: 0.5,
+    final cc = countryCode?.toUpperCase();
+    return SizedBox(
+      height: 24,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (cc != null && cc.length == 2) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              decoration: BoxDecoration(
+                color: c.primary.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: c.primary.withOpacity(0.35)),
+              ),
+              child: Text(
+                cc,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  color: c.primary,
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
+          Flexible(
+            child: Text(
+              name!,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+                color: c.textPrimary,
+              ),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
-          const SizedBox(width: 10),
         ],
-        Flexible(
-          child: Text(
-            name!,
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w500,
-              color: c.textPrimary,
-            ),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
+      ),
     );
   }
 }

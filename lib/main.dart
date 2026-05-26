@@ -12,7 +12,7 @@ void main() async {
   }
 
   await windowManager.ensureInitialized();
-  await windowManager.setTitle('VPN Client');
+  await windowManager.setTitle('LightningMcQueen');
   await windowManager.setMinimumSize(const Size(480, 600));
   await windowManager.setPreventClose(true);
 

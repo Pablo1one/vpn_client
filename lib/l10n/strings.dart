@@ -61,6 +61,13 @@ class L10n {
   final String themeSection;
   final String themeJackson;
   final String themeMcQueen;
+  final String cdnTab;
+  final String cdnTitle;
+  final String cdnDesc;
+  final String cdnConnect;
+  final String cdnDisconnect;
+  final String cdnReset;
+  final String cdnRegistering;
 
   const L10n._({
     required this.appName,
@@ -121,6 +128,13 @@ class L10n {
     required this.themeSection,
     required this.themeJackson,
     required this.themeMcQueen,
+    required this.cdnTab,
+    required this.cdnTitle,
+    required this.cdnDesc,
+    required this.cdnConnect,
+    required this.cdnDisconnect,
+    required this.cdnReset,
+    required this.cdnRegistering,
   }) : _foundProfiles = foundProfiles;
 
   String foundProfiles(int n) => _foundProfiles.replaceAll('{n}', '$n');
@@ -190,6 +204,13 @@ class L10n {
     themeSection: 'Theme',
     themeJackson: 'Jackson Storm',
     themeMcQueen: 'Lightning McQueen',
+    cdnTab: 'CDN',
+    cdnTitle: 'Cloudflare WARP',
+    cdnDesc: 'Free VPN by Cloudflare. No keys needed — connects automatically.',
+    cdnConnect: 'Connect',
+    cdnDisconnect: 'Disconnect',
+    cdnReset: 'Reset account',
+    cdnRegistering: 'Registering…',
   );
 
   static const ru = L10n._(
@@ -252,5 +273,12 @@ class L10n {
     themeSection: 'Тема',
     themeJackson: 'Jackson Storm',
     themeMcQueen: 'Lightning McQueen',
+    cdnTab: 'CDN',
+    cdnTitle: 'Cloudflare WARP',
+    cdnDesc: 'Бесплатный VPN от Cloudflare. Ключи не нужны — подключается автоматически.',
+    cdnConnect: 'Подключить',
+    cdnDisconnect: 'Отключить',
+    cdnReset: 'Сбросить аккаунт',
+    cdnRegistering: 'Регистрация…',
   );
 }

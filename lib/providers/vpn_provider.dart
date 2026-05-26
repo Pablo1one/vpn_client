@@ -8,6 +8,7 @@ import '../models/profile.dart';
 import '../services/profile_repository.dart';
 import '../services/speed_service.dart';
 import '../services/vpn_service.dart';
+import '../services/warp_service.dart';
 import '../utils/config_builder.dart';
 import '../utils/link_parser.dart';
 
@@ -157,6 +158,26 @@ class VpnProvider extends ChangeNotifier {
       _error = e.toString().replaceFirst('UnimplementedError: ', '');
       notifyListeners();
     }
+  }
+
+  Future<void> connectWarp() async {
+    _error = null;
+    _status = VpnStatus.connecting;
+    notifyListeners();
+    try {
+      var config = await WarpService.loadSaved();
+      config ??= await WarpService.register();
+      await _vpn.connectAwg(config.toWgConf());
+    } catch (e) {
+      _status = VpnStatus.error;
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> resetWarp() async {
+    await WarpService.clear();
+    notifyListeners();
   }
 
   Future<void> disconnect() async {
