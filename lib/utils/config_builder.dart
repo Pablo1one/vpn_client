@@ -3,15 +3,14 @@ import '../models/profile.dart';
 
 enum RoutingMode { fullVpn, russiaBypass, custom }
 
-/// Private IP ranges — used in Xray routing to always go direct.
+// приватные диапазоны — всегда напрямую
 const _kPrivateCidrs = [
   '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16',
   '127.0.0.0/8', '169.254.0.0/16', '224.0.0.0/4',
 ];
 
 class ConfigBuilder {
-  // ── Mobile: full sing-box config (TUN + protocol outbound) ───────────────
-  // Used on Android/iOS where sing-box handles VLESS/TUIC/H2 natively.
+  // мобильный: полный singbox конфиг (tun + аутбаунд протокола)
   static Map<String, dynamic> build(
     VpnProfile profile, {
     RoutingMode routingMode = RoutingMode.fullVpn,
@@ -65,10 +64,7 @@ class ConfigBuilder {
     };
   }
 
-  // ── TUN-only sing-box config ──────────────────────────────────────────────
-  // IPv4-only TUN that forwards everything to the proxy on 127.0.0.1:10808.
-  // Used for ALL TUN-based protocols (VLESS via Xray, TUIC/H2 via sing-box proxy).
-  // Mirrors Happ's architecture: sing-box = dumb TUN forwarder, proxy = smart router.
+  // tun форвардер: только ipv4 tun → socks5 10808
   static Map<String, dynamic> buildTun() => {
         'log': {'level': 'info'},
         'dns': {
@@ -81,9 +77,6 @@ class ConfigBuilder {
             'type': 'tun',
             'tag': 'tun-in',
             'interface_name': 'tun0',
-            // IPv4-only: auto_route won't touch the IPv6 routing table.
-            // Russian IPv6 sites go direct via physical NIC; foreign IPv6
-            // blocked by ISP → Happy Eyeballs falls back to IPv4 via proxy.
             'address': ['172.19.0.1/30'],
             'mtu': 9000,
             'auto_route': true,
@@ -110,7 +103,7 @@ class ConfigBuilder {
           'auto_detect_interface': true,
           'final': 'proxy',
           'rules': [
-            // Bypass TUN for our own proxy processes to avoid routing loops.
+            // исключаем свои процессы чтобы не было петли маршрутизации
             {
               'process_name': ['xray.exe', 'sing-box.exe'],
               'outbound': 'direct',
@@ -121,10 +114,7 @@ class ConfigBuilder {
         },
       };
 
-  // ── Xray config for VLESS (all transports) ────────────────────────────────
-  // Xray listens on SOCKS5 127.0.0.1:10808, routes by IP:
-  //   private + Russian CIDRs → direct (freedom)
-  //   everything else        → VLESS proxy
+  // xray конфиг для vless — socks5 на 10808 с ip маршрутизацией
   static String buildXrayVless(
     VpnProfile profile, {
     RoutingMode routingMode = RoutingMode.fullVpn,
@@ -176,10 +166,7 @@ class ConfigBuilder {
     return const JsonEncoder.withIndent('  ').convert(config);
   }
 
-  // ── sing-box SOCKS proxy config for TUIC / Hysteria2 ──────────────────────
-  // sing-box listens on SOCKS5 127.0.0.1:10808 and routes by IP:
-  //   private + Russian CIDRs → direct
-  //   everything else        → TUIC / H2 outbound
+  // singbox socks5 прокси для tuic/h2 — ip маршрутизация
   static Map<String, dynamic> buildSingboxProxy(
     VpnProfile profile, {
     RoutingMode routingMode = RoutingMode.fullVpn,
@@ -230,8 +217,6 @@ class ConfigBuilder {
     };
   }
 
-  // ── AWG .conf builder (unchanged) ────────────────────────────────────────
-
   static String buildAwgConf(
     VpnProfile profile, {
     List<String>? bypassAllowedIps,
@@ -278,8 +263,6 @@ class ConfigBuilder {
 
   static String toJson(Map<String, dynamic> config) =>
       const JsonEncoder.withIndent('  ').convert(config);
-
-  // ── Xray helpers ──────────────────────────────────────────────────────────
 
   static Map<String, dynamic> _xrayStream(Map<String, dynamic> c) {
     final transport = c['transport'] as String? ?? 'tcp';
@@ -353,8 +336,6 @@ class ConfigBuilder {
 
     return {'domainStrategy': 'IPIfNonMatch', 'rules': rules};
   }
-
-  // ── sing-box outbounds (TUIC / H2) ───────────────────────────────────────
 
   static Map<String, dynamic> _singboxVless(Map<String, dynamic> c) {
     final transport = c['transport'] as String? ?? 'tcp';

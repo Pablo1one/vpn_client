@@ -10,8 +10,6 @@ abstract class VpnService {
   Stream<VpnStatus> get statusStream;
   Future<void> connect(String singboxConfigJson,
       {List<String> excludedApps = const []});
-  /// Proxy + TUN mode: starts a SOCKS5 proxy on 127.0.0.1:10808 (xray or sing-box),
-  /// then optionally starts a TUN sing-box forwarder that routes everything to that proxy.
   Future<void> connectProxy({
     String? singboxConfigJson,
     String? xrayConfigJson,
@@ -19,7 +17,6 @@ abstract class VpnService {
   });
   Future<void> connectAwg(String confContent);
   Future<void> disconnect();
-  /// Kills any stale VPN processes left from a crash.
   Future<void> cleanup();
   void dispose();
 
@@ -31,7 +28,7 @@ abstract class VpnService {
   }
 }
 
-// ─── Mobile (Android + iOS) ──────────────────────────────────────────────────
+// мобильный (android + ios)
 class _MobileVpnService implements VpnService {
   static const _method = MethodChannel('com.example.vpn_client/vpn');
   static const _events = EventChannel('com.example.vpn_client/vpn_events');
@@ -88,24 +85,16 @@ class _MobileVpnService implements VpnService {
   }
 }
 
-// ─── Windows ─────────────────────────────────────────────────────────────────
-// New architecture (mirrors Happ):
-//   _proxyProcess = xray.exe or sing-box.exe listening on SOCKS5 127.0.0.1:10808
-//   _process      = sing-box.exe TUN forwarder → routes all traffic to :10808
-//
-// Requires sing-box.exe + xray.exe at <app_dir>\data\flutter_assets\assets\bin\
-// WinTun driver must be installed. Run as Administrator for TUN interface creation.
+// windows — прокси (xray или singbox) на порту 10808 плюс tun форвардер
 class _WindowsVpnService implements VpnService {
   final _controller = StreamController<VpnStatus>.broadcast();
 
-  // TUN sing-box process
-  Process? _process;
+  Process? _process;         // tun singbox
   StreamSubscription? _outSub;
   StreamSubscription? _errSub;
   File? _configFile;
 
-  // Proxy process (xray or sing-box proxy)
-  Process? _proxyProcess;
+  Process? _proxyProcess;    // xray или singbox прокси
   File? _proxyConfigFile;
 
   bool _awgActive = false;
@@ -147,9 +136,7 @@ class _WindowsVpnService implements VpnService {
     _proxyConfigFile = null;
   }
 
-  // Removes the tun0 WinTun adapter left by a previous sing-box session.
-  // sing-box does not remove it on crash/force-kill, so the next run fails with
-  // "Cannot create a file when that file already exists".
+  // sing-box не удаляет tun0 при падении — следующий запуск упадёт с "file already exists"
   Future<void> _removeTunAdapter() async {
     await Process.run(
       'powershell',
@@ -189,14 +176,12 @@ class _WindowsVpnService implements VpnService {
     _configFile = null;
   }
 
-  // Starts xray.exe or sing-box.exe as a SOCKS5 proxy on 127.0.0.1:10808.
-  // Waits until port 10808 accepts connections (up to 8 s).
   Future<void> _startProxy(String configJson, {required bool isXray}) async {
     final exePath = isXray ? '$_binDir\\xray.exe' : _exePath;
     final exe = File(exePath);
     if (!exe.existsSync()) {
       throw Exception(
-        '${isXray ? "xray" : "sing-box"}.exe not found.\nExpected: $exePath',
+        '${isXray ? "xray" : "sing-box"}.exe не найден\nОжидается: $exePath',
       );
     }
 
@@ -218,6 +203,7 @@ class _WindowsVpnService implements VpnService {
     proc.stderr.transform(utf8.decoder).transform(const LineSplitter()).listen((l) => errLines.add(l));
     proc.exitCode.then((_) => exited = true);
 
+    // ждём открытия порта 10808 до 8 с
     for (var i = 0; i < 16; i++) {
       await Future.delayed(const Duration(milliseconds: 500));
       if (exited) {
@@ -239,8 +225,6 @@ class _WindowsVpnService implements VpnService {
     );
   }
 
-  // Starts sing-box.exe as an IPv4-only TUN forwarder.
-  // Waits for "sing-box started" in logs (up to 25 s — WinTun init can be slow).
   Future<void> _launchTun(String configJson) async {
     _configFile = File(
       '${Directory.systemTemp.path}\\vpn_client_tun_${DateTime.now().millisecondsSinceEpoch}.json',
@@ -291,11 +275,12 @@ class _WindowsVpnService implements VpnService {
       }
     });
 
+    // первый холодный старт wintun занимает до 20 с
     Future.delayed(const Duration(seconds: 25), () {
       if (!started && !ready.isCompleted) {
         final log = allLines.isNotEmpty
             ? allLines.take(10).join('\n')
-            : '(нет вывода — sing-box не запустился или нет прав администратора)';
+            : '(нет вывода — нет прав администратора?)';
         _controller.add(VpnStatus.error);
         ready.completeError(
             Exception('sing-box не запустился за 25 с:\n$log'));
@@ -342,14 +327,8 @@ class _WindowsVpnService implements VpnService {
     try {
       final exe = File(_exePath);
       if (!exe.existsSync()) {
-        throw Exception(
-          'sing-box.exe not found.\n'
-          'Expected: ${exe.path}\n'
-          'Download from https://github.com/SagerNet/sing-box/releases '
-          'and place at assets/bin/sing-box.exe, then rebuild.',
-        );
+        throw Exception('sing-box.exe не найден\nОжидается: ${exe.path}');
       }
-
       await _ensureWintun();
       await _killExistingProcess();
       await _launchTun(configJson);
@@ -366,11 +345,7 @@ class _WindowsVpnService implements VpnService {
     try {
       final awgExe = File('$_binDir\\amneziawg.exe');
       if (!awgExe.existsSync()) {
-        throw Exception(
-          'amneziawg.exe not found.\n'
-          'Expected: ${awgExe.path}\n'
-          'Download from https://github.com/amnezia-vpn/amneziawg-windows-client/releases',
-        );
+        throw Exception('amneziawg.exe не найден\nОжидается: ${awgExe.path}');
       }
 
       await _uninstallAwgTunnel();
@@ -386,7 +361,7 @@ class _WindowsVpnService implements VpnService {
 
       if (result.exitCode != 0) {
         throw Exception(
-          'amneziawg install failed (code ${result.exitCode}): ${result.stderr}',
+          'amneziawg: ошибка установки туннеля (код ${result.exitCode}): ${result.stderr}',
         );
       }
 
