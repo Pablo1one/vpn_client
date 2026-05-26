@@ -16,6 +16,7 @@ class ProfilesScreen extends StatelessWidget {
     final vpn = context.watch<VpnProvider>();
     context.watch<LanguageProvider>();
     final s = L10n.of(context);
+    final c = context.ac;
 
     return Scaffold(
       appBar: AppBar(title: Text(s.profilesTab)),
@@ -24,11 +25,10 @@ class ProfilesScreen extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.vpn_key_outlined,
-                      size: 64, color: const Color(0xFF2A3A4A)),
+                  Icon(Icons.vpn_key_outlined, size: 64, color: c.textMuted),
                   const SizedBox(height: 16),
                   Text(s.noProfiles,
-                      style: const TextStyle(color: Color(0xFF3A4A5A))),
+                      style: TextStyle(color: c.textMuted)),
                   const SizedBox(height: 24),
                   FilledButton.icon(
                     onPressed: () => _openImport(context),
@@ -63,17 +63,18 @@ class _ProfileList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.ac;
     final groups = <String?, List<VpnProfile>>{};
     for (final p in vpn.profiles) {
       groups.putIfAbsent(p.subscriptionUrl, () => []).add(p);
     }
-    final subUrls = groups.keys.where((k) => k != null).cast<String>().toList();
+    final subUrls =
+        groups.keys.where((k) => k != null).cast<String>().toList();
     final standalone = groups[null] ?? [];
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
       children: [
-        // подписки — каждая в своей карточке-группе
         for (final url in subUrls) ...[
           _SubscriptionGroup(
             url: url,
@@ -84,17 +85,16 @@ class _ProfileList extends StatelessWidget {
           ),
           const SizedBox(height: 12),
         ],
-        // отдельные ключи
         if (standalone.isNotEmpty) ...[
           if (subUrls.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
               child: Text(
                 s.standaloneKeys.toUpperCase(),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 10,
                   letterSpacing: 1.4,
-                  color: Color(0xFF4A5A6A),
+                  color: c.textMuted,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -151,41 +151,41 @@ class _SubscriptionGroup extends StatelessWidget {
     required this.onDelete,
   });
 
-  String _shortUrl(String url) {
+  String _shortUrl(String u) {
     try {
-      final uri = Uri.parse(url);
-      return uri.host.isNotEmpty ? uri.host : url;
+      final uri = Uri.parse(u);
+      return uri.host.isNotEmpty ? uri.host : u;
     } catch (_) {
-      return url.length > 48 ? '${url.substring(0, 48)}…' : url;
+      return u.length > 48 ? '${u.substring(0, 48)}…' : u;
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final c = context.ac;
     final refreshing = vpn.isRefreshing(url);
 
     return Container(
       decoration: BoxDecoration(
-        color: AppTheme.card,
+        color: c.card,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF1E1E38)),
+        border: Border.all(color: c.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ── заголовок подписки ─────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
             child: Row(
               children: [
-                const Icon(Icons.link_rounded, size: 14, color: AppTheme.cyan),
+                Icon(Icons.link_rounded, size: 14, color: c.primary),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     _shortUrl(url),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: AppTheme.cyan,
+                      color: c.primary,
                       fontWeight: FontWeight.w600,
                       letterSpacing: 0.2,
                     ),
@@ -195,16 +195,15 @@ class _SubscriptionGroup extends StatelessWidget {
                 const SizedBox(width: 4),
                 Text(
                   '${profiles.length}',
-                  style: const TextStyle(
-                      fontSize: 11, color: Color(0xFF4A5A6A)),
+                  style: TextStyle(fontSize: 11, color: c.textMuted),
                 ),
                 const SizedBox(width: 6),
                 if (refreshing)
-                  const SizedBox(
+                  SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(
-                        strokeWidth: 1.5, color: AppTheme.cyan),
+                        strokeWidth: 1.5, color: c.primary),
                   )
                 else
                   MouseRegion(
@@ -213,10 +212,10 @@ class _SubscriptionGroup extends StatelessWidget {
                       onTap: () => vpn.refreshSubscription(url),
                       child: Tooltip(
                         message: s.refreshSubscription,
-                        child: const Padding(
-                          padding: EdgeInsets.all(6),
+                        child: Padding(
+                          padding: const EdgeInsets.all(6),
                           child: Icon(Icons.refresh_rounded,
-                              size: 18, color: AppTheme.cyan),
+                              size: 18, color: c.primary),
                         ),
                       ),
                     ),
@@ -224,8 +223,7 @@ class _SubscriptionGroup extends StatelessWidget {
               ],
             ),
           ),
-          const Divider(height: 1, color: Color(0xFF1A1A2E)),
-          // ── профили внутри ─────────────────────────────────────────────
+          Divider(height: 1, color: c.border),
           for (int i = 0; i < profiles.length; i++) ...[
             _InlineProfileTile(
               profile: profiles[i],
@@ -234,9 +232,11 @@ class _SubscriptionGroup extends StatelessWidget {
               onDelete: () => onDelete(profiles[i]),
             ),
             if (i < profiles.length - 1)
-              const Divider(
-                  height: 1, indent: 56, endIndent: 0,
-                  color: Color(0xFF191929)),
+              Divider(
+                  height: 1,
+                  indent: 56,
+                  endIndent: 0,
+                  color: c.borderFaint),
           ],
         ],
       ),
@@ -261,6 +261,7 @@ class _InlineProfileTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.ac;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: InkWell(
@@ -272,13 +273,12 @@ class _InlineProfileTile extends StatelessWidget {
             children: [
               CircleAvatar(
                 radius: 16,
-                backgroundColor: isActive
-                    ? AppTheme.cyan.withOpacity(0.15)
-                    : const Color(0xFF1A1A2E),
+                backgroundColor:
+                    isActive ? c.primary.withOpacity(0.15) : c.avatarBg,
                 child: Icon(
                   _icon(profile.protocol),
                   size: 16,
-                  color: isActive ? AppTheme.cyan : const Color(0xFF3A4A5A),
+                  color: isActive ? c.primary : c.textMuted,
                 ),
               ),
               const SizedBox(width: 12),
@@ -291,31 +291,28 @@ class _InlineProfileTile extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
-                        color: isActive
-                            ? AppTheme.cyan
-                            : const Color(0xFFB0C4D8),
+                        color: isActive ? c.primary : c.textPrimary,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 2),
                     Text(
                       '${profile.protocolLabel}  •  ${profile.serverHost}',
-                      style: const TextStyle(
-                          fontSize: 11, color: Color(0xFF4A5A6A)),
+                      style: TextStyle(fontSize: 11, color: c.textMuted),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
               ),
               if (isActive)
-                const Padding(
-                  padding: EdgeInsets.only(right: 4),
+                Padding(
+                  padding: const EdgeInsets.only(right: 4),
                   child: Icon(Icons.check_circle_rounded,
-                      color: AppTheme.cyan, size: 16),
+                      color: c.primary, size: 16),
                 ),
               IconButton(
-                icon: const Icon(Icons.delete_outline,
-                    size: 18, color: Color(0xFF3A4A5A)),
+                icon: Icon(Icons.delete_outline,
+                    size: 18, color: c.textMuted),
                 onPressed: onDelete,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
@@ -355,34 +352,34 @@ class _ProfileTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.ac;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: Card(
-        color: isActive ? AppTheme.cyan.withOpacity(0.07) : AppTheme.card,
+        color: isActive ? c.primary.withOpacity(0.07) : c.card,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
           side: isActive
-              ? BorderSide(color: AppTheme.cyan.withOpacity(0.35))
-              : const BorderSide(color: Color(0xFF1E1E38)),
+              ? BorderSide(color: c.primary.withOpacity(0.35))
+              : BorderSide(color: c.border),
         ),
         child: ListTile(
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           leading: CircleAvatar(
-            backgroundColor: isActive
-                ? AppTheme.cyan.withOpacity(0.15)
-                : const Color(0xFF1A1A2E),
+            backgroundColor:
+                isActive ? c.primary.withOpacity(0.15) : c.avatarBg,
             child: Icon(
               _icon(profile.protocol),
               size: 20,
-              color: isActive ? AppTheme.cyan : const Color(0xFF3A4A5A),
+              color: isActive ? c.primary : c.textMuted,
             ),
           ),
           title: Text(profile.name,
               style: const TextStyle(fontWeight: FontWeight.w500)),
           subtitle: Text(
             '${profile.protocolLabel}  •  ${profile.serverHost}',
-            style: const TextStyle(fontSize: 12, color: Color(0xFF4A5A6A)),
+            style: TextStyle(fontSize: 12, color: c.textMuted),
             overflow: TextOverflow.ellipsis,
           ),
           trailing: Row(
@@ -392,11 +389,11 @@ class _ProfileTile extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(right: 4),
                   child: Icon(Icons.check_circle_rounded,
-                      color: AppTheme.cyan, size: 18),
+                      color: c.primary, size: 18),
                 ),
               IconButton(
-                icon: const Icon(Icons.delete_outline,
-                    size: 20, color: Color(0xFF3A4A5A)),
+                icon: Icon(Icons.delete_outline,
+                    size: 20, color: c.textMuted),
                 onPressed: onDelete,
               ),
             ],

@@ -35,37 +35,28 @@ class HomeScreen extends StatelessWidget {
                       : vpn.connect,
             ),
             const SizedBox(height: 16),
-
-            // таймер — фиксированная высота, не прыгает
             _ConnectionTimer(connectedAt: vpn.connectedAt),
             const SizedBox(height: 10),
-
-            // скорость — всегда занимает место, opacity меняется
             _SpeedWidget(stream: vpn.speedStream, visible: vpn.isConnected),
             const SizedBox(height: 14),
-
-            // имя профиля и флаг — всегда на месте
             _ProfileLabel(
               name: vpn.activeProfile?.name,
               countryCode: vpn.activeCountryCode,
             ),
             const SizedBox(height: 5),
-
-            // протокол — фиксированная высота
             SizedBox(
               height: 18,
               child: vpn.activeProfile != null
                   ? Text(
                       vpn.activeProfile!.protocolLabel,
-                      style: const TextStyle(
-                          fontSize: 12, color: Color(0xFF4A5A6A)),
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: context.ac.textSecondary),
                     )
                   : null,
             ),
             const SizedBox(height: 8),
-
             _RoutingBadge(vpn: vpn),
-
             if (vpn.error != null) ...[
               const SizedBox(height: 20),
               Padding(
@@ -96,30 +87,28 @@ class _StatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = L10n.of(context);
+    final c = context.ac;
     final (label, color) = switch (status) {
-      VpnStatus.connected => (s.connected, AppTheme.cyan),
-      VpnStatus.connecting => (s.connecting, const Color(0xFF00AAFF)),
-      VpnStatus.disconnecting => (s.disconnecting, const Color(0xFF00AAFF)),
-      VpnStatus.error => (s.error, const Color(0xFFFF4560)),
-      _ => (s.disconnected, const Color(0xFF3A4A5A)),
+      VpnStatus.connected    => (s.connected, c.primary),
+      VpnStatus.connecting   => (s.connecting, c.primary),
+      VpnStatus.disconnecting => (s.disconnecting, c.primary),
+      VpnStatus.error        => (s.error, Theme.of(context).colorScheme.error),
+      _                      => (s.disconnected, c.textMuted),
     };
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 8,
-          height: 8,
+          width: 8, height: 8,
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 8),
-        Text(
-          label,
-          style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.5,
-              fontSize: 13),
-        ),
+        Text(label,
+            style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.5,
+                fontSize: 13)),
       ],
     );
   }
@@ -150,14 +139,10 @@ class _ConnectButtonState extends State<_ConnectButton>
   @override
   void initState() {
     super.initState();
-    _spin = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1400),
-    );
-    _pulse = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-    );
+    _spin = AnimationController(vsync: this,
+        duration: const Duration(milliseconds: 1400));
+    _pulse = AnimationController(vsync: this,
+        duration: const Duration(milliseconds: 900));
     _updateAnimation();
   }
 
@@ -176,10 +161,8 @@ class _ConnectButtonState extends State<_ConnectButton>
       if (!_spin.isAnimating) _spin.repeat();
       if (!_pulse.isAnimating) _pulse.repeat(reverse: true);
     } else {
-      _spin.stop();
-      _spin.value = 0;
-      _pulse.stop();
-      _pulse.value = 0;
+      _spin.stop(); _spin.value = 0;
+      _pulse.stop(); _pulse.value = 0;
     }
   }
 
@@ -192,38 +175,38 @@ class _ConnectButtonState extends State<_ConnectButton>
 
   @override
   Widget build(BuildContext context) {
+    final c = context.ac;
     final connected = widget.status == VpnStatus.connected;
     final busy = _busy;
     final active = widget.hasProfile && !busy;
 
-    final color = connected
-        ? AppTheme.purple
+    final btnColor = connected
+        ? c.secondary
         : active
-            ? const Color(0xFF3A5060)
-            : const Color(0xFF1E2535);
+            ? c.btnActive
+            : c.btnInactive;
 
     final button = AnimatedContainer(
       duration: const Duration(milliseconds: 350),
-      width: 168,
-      height: 168,
+      width: 168, height: 168,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: color.withOpacity(connected ? 0.10 : 0.06),
+        color: btnColor.withOpacity(connected ? 0.12 : 0.07),
         border: Border.all(
-          color: color.withOpacity(active ? 0.85 : 0.25),
+          color: btnColor.withOpacity(active ? 0.85 : 0.25),
           width: connected ? 2.5 : 2,
         ),
         boxShadow: connected
             ? [
                 BoxShadow(
-                  color: AppTheme.purple.withOpacity(0.35),
-                  blurRadius: 44,
-                  spreadRadius: 6,
+                  color: c.secondary.withOpacity(0.40),
+                  blurRadius: 48,
+                  spreadRadius: 8,
                 ),
                 BoxShadow(
-                  color: AppTheme.purple.withOpacity(0.15),
-                  blurRadius: 80,
-                  spreadRadius: 16,
+                  color: c.secondary.withOpacity(0.18),
+                  blurRadius: 90,
+                  spreadRadius: 20,
                 ),
               ]
             : null,
@@ -231,7 +214,7 @@ class _ConnectButtonState extends State<_ConnectButton>
       child: Icon(
         Icons.power_settings_new_rounded,
         size: 68,
-        color: color.withOpacity(active ? 1 : 0.3),
+        color: btnColor.withOpacity(active ? 1 : 0.3),
       ),
     );
 
@@ -245,26 +228,20 @@ class _ConnectButtonState extends State<_ConnectButton>
             alignment: Alignment.center,
             children: [
               if (busy) ...[
-                // внешнее пульсирующее кольцо
                 SizedBox(
                   width: 200 + _pulse.value * 14,
                   height: 200 + _pulse.value * 14,
                   child: CircularProgressIndicator(
                     value: null,
-                    color: AppTheme.cyan
-                        .withOpacity(0.15 + _pulse.value * 0.18),
+                    color: c.primary.withOpacity(0.15 + _pulse.value * 0.18),
                     strokeWidth: 1.5,
                   ),
                 ),
-                // основное дуговое кольцо с градиентом
                 Transform.rotate(
                   angle: _spin.value * 6.2832,
                   child: SizedBox(
-                    width: 188,
-                    height: 188,
-                    child: CustomPaint(
-                      painter: _ArcPainter(AppTheme.cyan),
-                    ),
+                    width: 188, height: 188,
+                    child: CustomPaint(painter: _ArcPainter(c.primary)),
                   ),
                 ),
               ],
@@ -277,7 +254,6 @@ class _ConnectButtonState extends State<_ConnectButton>
   }
 }
 
-/// Дуга ~270° с градиентом от прозрачного к cyan
 class _ArcPainter extends CustomPainter {
   final Color color;
   const _ArcPainter(this.color);
@@ -285,16 +261,18 @@ class _ArcPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Rect.fromLTWH(3, 3, size.width - 6, size.height - 6);
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.0
-      ..strokeCap = StrokeCap.round
-      ..shader = SweepGradient(
-        colors: [color.withOpacity(0), color],
-        startAngle: 0,
-        endAngle: 4.71,
-      ).createShader(rect);
-    canvas.drawArc(rect, -1.57, 4.71, false, paint);
+    canvas.drawArc(
+      rect, -1.57, 4.71, false,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.0
+        ..strokeCap = StrokeCap.round
+        ..shader = SweepGradient(
+          colors: [color.withOpacity(0), color],
+          startAngle: 0,
+          endAngle: 4.71,
+        ).createShader(rect),
+    );
   }
 
   @override
@@ -308,7 +286,6 @@ class _ProfileLabel extends StatelessWidget {
   final String? countryCode;
   const _ProfileLabel({this.name, this.countryCode});
 
-  // правильная формула: 'A' = 0x1F1E6, не 0x1F1E0
   static String? _flag(String? cc) {
     if (cc == null || cc.length != 2) return null;
     return cc.toUpperCase().runes
@@ -318,12 +295,11 @@ class _ProfileLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.ac;
     final s = L10n.of(context);
     if (name == null) {
-      return Text(
-        s.noProfile,
-        style: const TextStyle(fontSize: 15, color: Color(0xFF3A4A5A)),
-      );
+      return Text(s.noProfile,
+          style: TextStyle(fontSize: 15, color: c.textMuted));
     }
     final flag = _flag(countryCode);
     return Row(
@@ -334,10 +310,10 @@ class _ProfileLabel extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             countryCode!.toUpperCase(),
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
-              color: Color(0xFF6A8AA0),
+              color: c.textSecondary,
               letterSpacing: 0.5,
             ),
           ),
@@ -346,10 +322,10 @@ class _ProfileLabel extends StatelessWidget {
         Flexible(
           child: Text(
             name!,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w500,
-              color: Color(0xFFB0C4D8),
+              color: c.textPrimary,
             ),
             overflow: TextOverflow.ellipsis,
           ),
@@ -367,7 +343,6 @@ class _ConnectionTimer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // фиксированная высота — layout не прыгает
     return SizedBox(
       height: 30,
       child: AnimatedOpacity(
@@ -386,8 +361,8 @@ class _ConnectionTimer extends StatelessWidget {
                 h > 0 ? '${h.toString().padLeft(2, '0')}:$m:$s' : '$m:$s';
             return Text(
               label,
-              style: const TextStyle(
-                color: AppTheme.purple,
+              style: TextStyle(
+                color: context.ac.secondary,
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
                 fontFamily: 'monospace',
@@ -410,7 +385,7 @@ class _SpeedWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // всегда занимает одно и то же место — только opacity меняется
+    final c = context.ac;
     return AnimatedOpacity(
       opacity: visible ? 1.0 : 0.0,
       duration: const Duration(milliseconds: 400),
@@ -419,12 +394,11 @@ class _SpeedWidget extends StatelessWidget {
         builder: (_, snap) {
           final data = snap.data ?? SpeedData.empty;
           return Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-              color: AppTheme.surface,
+              color: c.surface,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFF1E1E38)),
+              border: Border.all(color: c.border),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -432,20 +406,20 @@ class _SpeedWidget extends StatelessWidget {
                 _Stat(
                   icon: Icons.arrow_upward_rounded,
                   value: SpeedService.formatSpeed(data.uploadBps),
-                  color: const Color(0xFFFFB300),
+                  color: c.upload,
                 ),
                 const SizedBox(width: 20),
                 _Stat(
                   icon: Icons.arrow_downward_rounded,
                   value: SpeedService.formatSpeed(data.downloadBps),
-                  color: AppTheme.cyan,
+                  color: c.primary,
                 ),
                 if (data.pingMs >= 0) ...[
                   const SizedBox(width: 20),
                   _Stat(
                     icon: Icons.network_ping_rounded,
                     value: '${data.pingMs} ms',
-                    color: AppTheme.purple,
+                    color: c.secondary,
                   ),
                 ],
               ],
@@ -469,15 +443,13 @@ class _Stat extends StatelessWidget {
         children: [
           Icon(icon, size: 13, color: color.withOpacity(0.85)),
           const SizedBox(width: 4),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 13,
-              color: color,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.3,
-            ),
-          ),
+          Text(value,
+              style: TextStyle(
+                fontSize: 13,
+                color: color,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.3,
+              )),
         ],
       );
 }
@@ -491,23 +463,22 @@ class _RoutingBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = L10n.of(context);
+    final c = context.ac;
     final label = switch (vpn.routingMode) {
-      RoutingMode.fullVpn => s.routingFull,
+      RoutingMode.fullVpn      => s.routingFull,
       RoutingMode.russiaBypass => s.routingRussia,
-      RoutingMode.custom => s.routingCustom,
+      RoutingMode.custom       => s.routingCustom,
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: AppTheme.cyan.withOpacity(0.06),
+        color: c.primary.withOpacity(0.07),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppTheme.cyan.withOpacity(0.18)),
+        border: Border.all(color: c.primary.withOpacity(0.2)),
       ),
-      child: Text(
-        label,
-        style: const TextStyle(
-            fontSize: 11, color: AppTheme.cyan, letterSpacing: 0.3),
-      ),
+      child: Text(label,
+          style: TextStyle(
+              fontSize: 11, color: c.primary, letterSpacing: 0.3)),
     );
   }
 }

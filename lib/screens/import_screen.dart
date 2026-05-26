@@ -26,7 +26,6 @@ class _ImportScreenState extends State<ImportScreen> {
   List<VpnProfile>? _batch;
   bool _loading = false;
 
-  // когда выбран .conf файл — показываем только имя, не содержимое
   String? _pickedFileName;
   String? _pickedFileContent;
 
@@ -141,8 +140,10 @@ class _ImportScreenState extends State<ImportScreen> {
   Widget build(BuildContext context) {
     context.watch<LanguageProvider>();
     final s = L10n.of(context);
+    final c = context.ac;
     final colors = Theme.of(context).colorScheme;
-    final canImport = _parsed != null || (_batch != null && _batch!.isNotEmpty);
+    final canImport =
+        _parsed != null || (_batch != null && _batch!.isNotEmpty);
 
     return Scaffold(
       appBar: AppBar(title: Text(s.importProfile)),
@@ -160,20 +161,19 @@ class _ImportScreenState extends State<ImportScreen> {
                 style: const TextStyle(fontSize: 14),
                 decoration: InputDecoration(
                   hintText: s.importHint,
-                  hintStyle:
-                      const TextStyle(fontSize: 13, color: Color(0xFF3A4060)),
+                  hintStyle: TextStyle(fontSize: 13, color: c.textMuted),
                   suffixIcon: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.content_paste_rounded,
-                            color: AppTheme.cyan),
+                        icon: Icon(Icons.content_paste_rounded,
+                            color: c.primary),
                         tooltip: s.pasteBtn,
                         onPressed: _paste,
                       ),
                       IconButton(
-                        icon: const Icon(Icons.folder_open_outlined,
-                            color: AppTheme.cyan),
+                        icon: Icon(Icons.folder_open_outlined,
+                            color: c.primary),
                         tooltip: s.openFile,
                         onPressed: _pickFile,
                       ),
@@ -191,7 +191,7 @@ class _ImportScreenState extends State<ImportScreen> {
                   label: Text(s.openFile,
                       style: const TextStyle(fontSize: 12)),
                   style: TextButton.styleFrom(
-                    foregroundColor: AppTheme.cyan,
+                    foregroundColor: c.primary,
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                   ),
                   onPressed: _pickFile,
@@ -202,7 +202,7 @@ class _ImportScreenState extends State<ImportScreen> {
             if (_loading)
               _Banner(
                 icon: Icons.cloud_download_outlined,
-                color: AppTheme.cyan,
+                color: c.primary,
                 text: s.fetchingUrl,
               ),
             if (_error != null)
@@ -214,13 +214,13 @@ class _ImportScreenState extends State<ImportScreen> {
             if (_parsed != null)
               _Banner(
                 icon: Icons.check_circle_outline,
-                color: AppTheme.cyan,
+                color: c.primary,
                 text: '${_parsed!.name}  •  ${_parsed!.protocolLabel}',
               ),
             if (_batch != null && _batch!.isNotEmpty)
               _Banner(
                 icon: Icons.check_circle_outline,
-                color: AppTheme.cyan,
+                color: c.primary,
                 text: s.foundProfiles(_batch!.length),
               ),
             const Spacer(),
@@ -243,30 +243,30 @@ class _FileChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.ac;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: AppTheme.cyan.withOpacity(0.07),
+        color: c.primary.withOpacity(0.07),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.cyan.withOpacity(0.3)),
+        border: Border.all(color: c.primary.withOpacity(0.3)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.insert_drive_file_outlined,
-              size: 18, color: AppTheme.cyan),
+          Icon(Icons.insert_drive_file_outlined, size: 18, color: c.primary),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               name,
-              style: const TextStyle(
+              style: TextStyle(
                   fontSize: 14,
-                  color: AppTheme.cyan,
+                  color: c.primary,
                   fontWeight: FontWeight.w500),
               overflow: TextOverflow.ellipsis,
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.close, size: 18, color: AppTheme.cyan),
+            icon: Icon(Icons.close, size: 18, color: c.primary),
             onPressed: onClear,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),

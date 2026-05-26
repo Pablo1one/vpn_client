@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../providers/vpn_provider.dart';
 import '../providers/language_provider.dart';
+import '../providers/theme_provider.dart';
 import '../services/update_service.dart';
 import '../utils/config_builder.dart';
 import '../l10n/strings.dart';
@@ -52,15 +53,18 @@ class SettingsScreen extends StatelessWidget {
                 vpn.excludedApps.isEmpty
                     ? s.noExcludedApps
                     : '${vpn.excludedApps.length} app(s)',
-                style:
-                    const TextStyle(fontSize: 12, color: Color(0xFF5A6480)),
               ),
-              trailing: const Icon(Icons.chevron_right,
-                  size: 20, color: Color(0xFF5A6480)),
+              trailing: Icon(Icons.chevron_right,
+                  size: 20, color: context.ac.textMuted),
               onTap: () => _openAppPicker(context, vpn, s),
             ),
             const Divider(height: 1),
           ],
+
+          // ── Theme ────────────────────────────────────────────────────────
+          _SectionHeader(s.themeSection),
+          _ThemeSelector(s: s),
+          const Divider(height: 1),
 
           // ── Updates ──────────────────────────────────────────────────────
           _SectionHeader(s.updates),
@@ -70,11 +74,11 @@ class SettingsScreen extends StatelessWidget {
           // ── Logs ─────────────────────────────────────────────────────────
           _SectionHeader(s.logs),
           ListTile(
-            leading: const Icon(Icons.receipt_long_outlined,
-                size: 20, color: Color(0xFF5A6480)),
+            leading: Icon(Icons.receipt_long_outlined,
+                size: 20, color: context.ac.textMuted),
             title: Text(s.logsTitle),
-            trailing: const Icon(Icons.chevron_right,
-                size: 20, color: Color(0xFF5A6480)),
+            trailing: Icon(Icons.chevron_right,
+                size: 20, color: context.ac.textMuted),
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const LogsScreen()),
@@ -86,27 +90,7 @@ class SettingsScreen extends StatelessWidget {
           _SectionHeader(s.language),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(value: 'ru', label: Text('Русский')),
-                ButtonSegment(value: 'en', label: Text('English')),
-              ],
-              selected: {lang.locale.languageCode},
-              onSelectionChanged: (v) =>
-                  lang.setLocale(Locale(v.first)),
-              style: ButtonStyle(
-                backgroundColor: WidgetStateProperty.resolveWith((s) =>
-                    s.contains(WidgetState.selected)
-                        ? AppTheme.cyan.withOpacity(0.15)
-                        : Colors.transparent),
-                foregroundColor: WidgetStateProperty.resolveWith((s) =>
-                    s.contains(WidgetState.selected)
-                        ? AppTheme.cyan
-                        : const Color(0xFF5A6480)),
-                side: WidgetStateProperty.all(
-                    const BorderSide(color: Color(0xFF2A2A4A))),
-              ),
-            ),
+            child: _LanguageSelector(lang: lang),
           ),
           const SizedBox(height: 24),
         ],
@@ -119,9 +103,6 @@ class SettingsScreen extends StatelessWidget {
     final result = await showModalBottomSheet<List<String>>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppTheme.card,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) => _AppPickerSheet(
         excluded: vpn.excludedApps,
         loadApps: vpn.getInstalledApps,
@@ -143,14 +124,150 @@ class _SectionHeader extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 20, 16, 6),
         child: Text(
           title.toUpperCase(),
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 10,
             letterSpacing: 1.4,
-            color: AppTheme.cyan,
+            color: context.ac.primary,
             fontWeight: FontWeight.w700,
           ),
         ),
       );
+}
+
+// ── Theme selector ────────────────────────────────────────────────────────────
+
+class _ThemeSelector extends StatelessWidget {
+  final L10n s;
+  const _ThemeSelector({required this.s});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ac;
+    final themeP = context.watch<ThemeProvider>();
+    final current = themeP.themeName;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      child: Wrap(
+        spacing: 10,
+        children: [
+          _ThemeChip(
+            label: s.themeMcQueen,
+            icon: Icons.wb_sunny_rounded,
+            selected: current == AppThemeName.lightningMcQueen,
+            color: const Color(0xFFCC1100),
+            onTap: () =>
+                themeP.setTheme(AppThemeName.lightningMcQueen),
+          ),
+          _ThemeChip(
+            label: s.themeJackson,
+            icon: Icons.nights_stay_rounded,
+            selected: current == AppThemeName.jacksonStorm,
+            color: c.primary,
+            onTap: () => themeP.setTheme(AppThemeName.jacksonStorm),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ThemeChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _ThemeChip({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ac;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: selected
+                ? color.withOpacity(0.12)
+                : c.surface,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: selected
+                  ? color.withOpacity(0.5)
+                  : c.border,
+              width: selected ? 1.5 : 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon,
+                  size: 15,
+                  color: selected ? color : c.textMuted),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: selected
+                      ? FontWeight.w600
+                      : FontWeight.w400,
+                  color: selected ? color : c.textSecondary,
+                ),
+              ),
+              if (selected) ...[
+                const SizedBox(width: 6),
+                Icon(Icons.check_rounded, size: 13, color: color),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Language selector ─────────────────────────────────────────────────────────
+
+class _LanguageSelector extends StatelessWidget {
+  final LanguageProvider lang;
+  const _LanguageSelector({required this.lang});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ac;
+    return SegmentedButton<String>(
+      segments: const [
+        ButtonSegment(value: 'ru', label: Text('Русский')),
+        ButtonSegment(value: 'en', label: Text('English')),
+      ],
+      selected: {lang.locale.languageCode},
+      onSelectionChanged: (v) => lang.setLocale(Locale(v.first)),
+      style: ButtonStyle(
+        backgroundColor: WidgetStateProperty.resolveWith((s) =>
+            s.contains(WidgetState.selected)
+                ? c.primary.withOpacity(0.15)
+                : Colors.transparent),
+        foregroundColor: WidgetStateProperty.resolveWith((s) =>
+            s.contains(WidgetState.selected)
+                ? c.primary
+                : c.textMuted),
+        side: WidgetStateProperty.all(BorderSide(color: c.border)),
+      ),
+    );
+  }
 }
 
 // ── Routing mode selector ─────────────────────────────────────────────────────
@@ -196,23 +313,24 @@ class _ModeChip extends StatelessWidget {
       {required this.label, required this.selected, required this.onTap});
 
   @override
-  Widget build(BuildContext context) => FilterChip(
-        label: Text(label),
-        selected: selected,
-        onSelected: (_) => onTap(),
-        selectedColor: AppTheme.cyan.withOpacity(0.15),
-        checkmarkColor: AppTheme.cyan,
-        labelStyle: TextStyle(
-            color: selected ? AppTheme.cyan : const Color(0xFF8090A8),
-            fontSize: 13),
-        side: BorderSide(
-            color: selected
-                ? AppTheme.cyan.withOpacity(0.4)
-                : const Color(0xFF2A2A4A)),
-        backgroundColor: AppTheme.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        showCheckmark: false,
-      );
+  Widget build(BuildContext context) {
+    final c = context.ac;
+    return FilterChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) => onTap(),
+      selectedColor: c.primary.withOpacity(0.15),
+      checkmarkColor: c.primary,
+      labelStyle: TextStyle(
+          color: selected ? c.primary : c.textMuted, fontSize: 13),
+      side: BorderSide(
+          color: selected ? c.primary.withOpacity(0.4) : c.border),
+      backgroundColor: c.surface,
+      shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      showCheckmark: false,
+    );
+  }
 }
 
 // ── Bypass domains tile ───────────────────────────────────────────────────────
@@ -231,10 +349,9 @@ class _BypassDomainsTile extends StatelessWidget {
               : vpn.bypassDomains.join(', '),
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 12, color: Color(0xFF5A6480)),
         ),
-        trailing: const Icon(Icons.chevron_right,
-            size: 20, color: Color(0xFF5A6480)),
+        trailing: Icon(Icons.chevron_right,
+            size: 20, color: context.ac.textMuted),
         onTap: () => _editBypass(context),
       );
 
@@ -261,17 +378,15 @@ class _BypassDialog extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(s.bypassDomainsDesc,
-                style: const TextStyle(
-                    fontSize: 13, color: Color(0xFF5A6480))),
+                style: TextStyle(
+                    fontSize: 13, color: context.ac.textSecondary)),
             const SizedBox(height: 12),
             TextField(
               controller: controller,
               maxLines: 8,
               style:
                   const TextStyle(fontSize: 13, fontFamily: 'monospace'),
-              decoration: InputDecoration(
-                hintText: s.bypassDomainsHint,
-              ),
+              decoration: InputDecoration(hintText: s.bypassDomainsHint),
             ),
           ],
         ),
@@ -337,6 +452,7 @@ class _AppPickerSheetState extends State<_AppPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.ac;
     final filtered = _query.isEmpty
         ? _apps
         : _apps
@@ -352,13 +468,12 @@ class _AppPickerSheetState extends State<_AppPickerSheet> {
       expand: false,
       builder: (_, ctrl) => Column(
         children: [
-          // Handle
           const SizedBox(height: 12),
           Container(
             width: 36,
             height: 4,
             decoration: BoxDecoration(
-              color: const Color(0xFF3A4060),
+              color: c.border,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -391,15 +506,16 @@ class _AppPickerSheetState extends State<_AppPickerSheet> {
               decoration: InputDecoration(
                 hintText: widget.s.searchApps,
                 prefixIcon: const Icon(Icons.search, size: 18),
-                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                contentPadding:
+                    const EdgeInsets.symmetric(vertical: 10),
               ),
             ),
           ),
           const SizedBox(height: 8),
           Expanded(
             child: _loading
-                ? const Center(
-                    child: CircularProgressIndicator(color: AppTheme.cyan))
+                ? Center(
+                    child: CircularProgressIndicator(color: c.primary))
                 : ListView.builder(
                     controller: ctrl,
                     itemCount: filtered.length,
@@ -420,11 +536,12 @@ class _AppPickerSheetState extends State<_AppPickerSheet> {
                         title: Text(name,
                             style: const TextStyle(fontSize: 14)),
                         subtitle: Text(pkg,
-                            style: const TextStyle(
-                                fontSize: 11, color: Color(0xFF4A5A6A))),
-                        activeColor: AppTheme.cyan,
+                            style: TextStyle(
+                                fontSize: 11, color: c.textMuted)),
+                        activeColor: c.primary,
                         checkColor: Colors.black,
-                        controlAffinity: ListTileControlAffinity.trailing,
+                        controlAffinity:
+                            ListTileControlAffinity.trailing,
                         dense: true,
                       );
                     },
@@ -473,14 +590,14 @@ class _UpdateTileState extends State<_UpdateTile> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.ac;
     final s = L10n.of(context);
     final sub = switch (_state) {
       _UpdateState.checking => s.checkingForUpdates,
       _UpdateState.upToDate => s.upToDate,
       _UpdateState.available => '${s.updateAvailable}: v${_info!.version}',
-      _UpdateState.idle => _currentVersion.isNotEmpty
-          ? '${s.version} $_currentVersion'
-          : '',
+      _UpdateState.idle =>
+        _currentVersion.isNotEmpty ? '${s.version} $_currentVersion' : '',
     };
 
     return ListTile(
@@ -490,29 +607,30 @@ class _UpdateTileState extends State<_UpdateTile> {
               style: TextStyle(
                 fontSize: 12,
                 color: _state == _UpdateState.available
-                    ? AppTheme.cyan
-                    : const Color(0xFF5A6480),
+                    ? c.primary
+                    : c.textMuted,
               ))
           : null,
       trailing: _state == _UpdateState.checking
-          ? const SizedBox(
+          ? SizedBox(
               width: 20,
               height: 20,
               child: CircularProgressIndicator(
-                  strokeWidth: 2, color: AppTheme.cyan),
+                  strokeWidth: 2, color: c.primary),
             )
           : _state == _UpdateState.available
               ? FilledButton.tonal(
                   onPressed: () => launchUrl(Uri.parse(_info!.downloadUrl),
                       mode: LaunchMode.externalApplication),
                   style: FilledButton.styleFrom(
-                    backgroundColor: AppTheme.cyan.withOpacity(0.15),
-                    foregroundColor: AppTheme.cyan,
+                    backgroundColor: c.primary.withOpacity(0.15),
+                    foregroundColor: c.primary,
                   ),
                   child: Text(s.download),
                 )
               : TextButton(
-                  onPressed: _state == _UpdateState.checking ? null : _check,
+                  onPressed:
+                      _state == _UpdateState.checking ? null : _check,
                   child: Text(s.checkForUpdates),
                 ),
     );

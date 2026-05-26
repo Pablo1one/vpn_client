@@ -57,6 +57,7 @@ class _LogsScreenState extends State<LogsScreen> {
   Widget build(BuildContext context) {
     context.watch<LanguageProvider>();
     final s = L10n.of(context);
+    final c = context.ac;
 
     return Scaffold(
       appBar: AppBar(
@@ -86,7 +87,7 @@ class _LogsScreenState extends State<LogsScreen> {
           ? Center(
               child: Text(
                 s.noLogs,
-                style: const TextStyle(color: Color(0xFF3A4A5A)),
+                style: TextStyle(color: c.textMuted),
               ),
             )
           : ListView.builder(
@@ -95,10 +96,10 @@ class _LogsScreenState extends State<LogsScreen> {
               itemCount: _lines.length,
               itemBuilder: (_, i) => Text(
                 _lines[i],
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
                   fontFamily: 'monospace',
-                  color: Color(0xFF8090A8),
+                  color: c.textSecondary,
                   height: 1.6,
                 ),
               ),

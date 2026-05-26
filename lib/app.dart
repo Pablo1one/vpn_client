@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 import 'providers/vpn_provider.dart';
 import 'providers/language_provider.dart';
+import 'providers/theme_provider.dart';
 import 'services/tray_service.dart';
 import 'services/vpn_service.dart';
 import 'screens/home_screen.dart';
@@ -21,11 +22,14 @@ class App extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => VpnProvider()..init()),
         ChangeNotifierProvider(create: (_) => LanguageProvider()..load()),
+        ChangeNotifierProvider(create: (_) => ThemeProvider()..load()),
       ],
-      child: Consumer<LanguageProvider>(
-        builder: (_, lang, __) => MaterialApp(
-          title: 'VPN Client',
-          theme: AppTheme.dark(),
+      child: Consumer2<LanguageProvider, ThemeProvider>(
+        builder: (_, lang, themeP, __) => MaterialApp(
+          title: 'McQueen',
+          theme: themeP.isDark
+              ? AppTheme.jacksonStorm()
+              : AppTheme.lightningMcQueen(),
           locale: lang.locale,
           debugShowCheckedModeBanner: false,
           home: const _Shell(),
@@ -85,7 +89,6 @@ class _ShellState extends State<_Shell> with WindowListener {
     super.dispose();
   }
 
-  // Minimize to tray on close instead of quitting
   @override
   void onWindowClose() async {
     if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
