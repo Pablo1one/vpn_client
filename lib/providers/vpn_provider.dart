@@ -7,11 +7,6 @@ import '../services/profile_repository.dart';
 import '../services/speed_service.dart';
 import '../services/vpn_service.dart';
 import '../utils/config_builder.dart';
-import '../utils/xray_config_builder.dart';
-
-bool _isVlessXhttp(VpnProfile p) =>
-    p.protocol == VpnProtocol.vless &&
-    (p.config['transport'] as String? ?? '') == 'xhttp';
 
 class VpnProvider extends ChangeNotifier {
   final _repo = ProfileRepository();
@@ -92,6 +87,7 @@ class VpnProvider extends ChangeNotifier {
       final profile = _activeProfile!;
 
       if (profile.protocol == VpnProtocol.amnezia && Platform.isWindows) {
+        // AWG — unchanged
         List<String>? bypassIps;
         if (_routingMode == RoutingMode.russiaBypass) {
           bypassIps = await _loadBypassAllowedIps();
@@ -101,18 +97,40 @@ class VpnProvider extends ChangeNotifier {
           bypassAllowedIps: bypassIps,
         );
         await _vpn.connectAwg(conf);
+      } else if (Platform.isWindows && profile.protocol == VpnProtocol.vless) {
+        // VLESS — Xray router on :10808 + TUN sing-box forwarder
+        final ruCidrs = _routingMode == RoutingMode.russiaBypass
+            ? await _loadRuCidrs()
+            : <String>[];
+        final xrayJson = ConfigBuilder.buildXrayVless(
+          profile,
+          routingMode: _routingMode,
+          ruCidrs: ruCidrs,
+        );
+        final tunConfig = ConfigBuilder.buildTun();
+        await _vpn.connectProxy(
+          xrayConfigJson: xrayJson,
+          tunConfigJson: ConfigBuilder.toJson(tunConfig),
+        );
       } else if (Platform.isWindows &&
           (profile.protocol == VpnProtocol.tuic ||
               profile.protocol == VpnProtocol.hysteria2)) {
-        // Proxy mode: no TUN, HTTP proxy on localhost, set system proxy.
-        final config = ConfigBuilder.buildProxyMode(profile);
-        await _vpn.connectProxy(singboxConfigJson: ConfigBuilder.toJson(config));
-      } else if (Platform.isWindows && _isVlessXhttp(profile)) {
-        // xhttp is xray-only; run xray standalone with HTTP proxy.
-        final xrayConfig = XrayConfigBuilder.buildStandalone(profile);
-        await _vpn.connectProxy(xrayConfigJson: XrayConfigBuilder.toJson(xrayConfig));
+        // TUIC / H2 — sing-box proxy on :10808 + TUN sing-box forwarder
+        final ruCidrs = _routingMode == RoutingMode.russiaBypass
+            ? await _loadRuCidrs()
+            : <String>[];
+        final proxyConfig = ConfigBuilder.buildSingboxProxy(
+          profile,
+          routingMode: _routingMode,
+          ruCidrs: ruCidrs,
+        );
+        final tunConfig = ConfigBuilder.buildTun();
+        await _vpn.connectProxy(
+          singboxConfigJson: ConfigBuilder.toJson(proxyConfig),
+          tunConfigJson: ConfigBuilder.toJson(tunConfig),
+        );
       } else {
-        // TUN mode: sing-box with full routing (VLESS reality/ws/grpc, WireGuard, mobile).
+        // Mobile (and any other platform): single sing-box with full config
         final config = ConfigBuilder.build(
           profile,
           routingMode: _routingMode,
@@ -196,6 +214,19 @@ class VpnProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<List<String>> _loadRuCidrs() async {
+    try {
+      final data = await rootBundle.loadString('assets/data/iplist_ru.txt');
+      return data
+          .split('\n')
+          .map((l) => l.trim())
+          .where((l) => l.isNotEmpty && !l.startsWith('#'))
+          .toList();
+    } catch (e) {
+      debugPrint('iplist_ru load error: $e');
+      return [];
+    }
+  }
 
   Future<List<String>> _loadBypassAllowedIps() async {
     try {
@@ -212,7 +243,6 @@ class VpnProvider extends ChangeNotifier {
     }
   }
 
-  /// Returns list of installed apps as {package, name} maps (Android only).
   Future<List<Map<String, String>>> getInstalledApps() async {
     if (!Platform.isAndroid) return [];
     try {
