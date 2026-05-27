@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -29,6 +30,9 @@ class VpnProvider extends ChangeNotifier {
 
   bool _warpActive = false;
 
+  final _pingResults = <String, int?>{};  // profileId → ms, null = недоступен
+  bool _pinging = false;
+
   final _countryCache = <String, String>{};
   String? _activeCountryCode;
   final _refreshing = <String>{};  // urls currently being refreshed
@@ -44,6 +48,8 @@ class VpnProvider extends ChangeNotifier {
   DateTime? get connectedAt => _connectedAt;
   bool get isConnected => _status == VpnStatus.connected;
   bool get warpActive => _warpActive;
+  Map<String, int?> get pingResults => Map.unmodifiable(_pingResults);
+  bool get pinging => _pinging;
   Stream<SpeedData> get speedStream => _speed.stream;
   bool get isBusy =>
       _status == VpnStatus.connecting || _status == VpnStatus.disconnecting;
@@ -183,6 +189,38 @@ class VpnProvider extends ChangeNotifier {
 
   Future<void> resetWarp() async {
     await WarpService.clear();
+    notifyListeners();
+  }
+
+  Future<void> pingAll() async {
+    if (_pinging) return;
+    _pinging = true;
+    _pingResults.clear();
+    notifyListeners();
+
+    await Future.wait(_profiles.map((p) async {
+      final host = p.serverHost;
+      final port = p.serverPort;
+      if (host.isEmpty) {
+        _pingResults[p.id] = null;
+        return;
+      }
+      try {
+        final sw = Stopwatch()..start();
+        final sock = await Socket.connect(
+          host, port,
+          timeout: const Duration(seconds: 5),
+        );
+        sw.stop();
+        await sock.close();
+        _pingResults[p.id] = sw.elapsedMilliseconds;
+      } catch (_) {
+        _pingResults[p.id] = null;
+      }
+      notifyListeners();
+    }));
+
+    _pinging = false;
     notifyListeners();
   }
 
