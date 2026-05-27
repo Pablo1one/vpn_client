@@ -12,6 +12,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
 UninstallDisplayName=LightningMcQueen
 UninstallDisplayIcon={app}\LightningMcQueen.exe
+SetupIconFile=D:\vpn_client\assets\icons\tray.ico
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"

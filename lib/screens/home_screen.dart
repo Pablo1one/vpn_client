@@ -21,7 +21,7 @@ class HomeScreen extends StatelessWidget {
 
     final c = context.ac;
     return Scaffold(
-      appBar: AppBar(title: Text(s.vpnTab)),
+      appBar: AppBar(title: const Text('LightningMcQueen')),
       body: Stack(
         children: [
           Positioned.fill(
