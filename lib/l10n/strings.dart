@@ -68,6 +68,9 @@ class L10n {
   final String cdnDisconnect;
   final String cdnReset;
   final String cdnRegistering;
+  final String cdnManual;
+  final String cdnManualDesc;
+  final String cdnSaveConfig;
 
   const L10n._({
     required this.appName,
@@ -135,6 +138,9 @@ class L10n {
     required this.cdnDisconnect,
     required this.cdnReset,
     required this.cdnRegistering,
+    required this.cdnManual,
+    required this.cdnManualDesc,
+    required this.cdnSaveConfig,
   }) : _foundProfiles = foundProfiles;
 
   String foundProfiles(int n) => _foundProfiles.replaceAll('{n}', '$n');
@@ -211,6 +217,9 @@ class L10n {
     cdnDisconnect: 'Disconnect',
     cdnReset: 'Reset account',
     cdnRegistering: 'Registering…',
+    cdnManual: 'Paste config manually',
+    cdnManualDesc: 'If auto-registration fails, generate a config via wgcf or similar and paste it here.',
+    cdnSaveConfig: 'Save config',
   );
 
   static const ru = L10n._(
@@ -280,5 +289,8 @@ class L10n {
     cdnDisconnect: 'Отключить',
     cdnReset: 'Сбросить аккаунт',
     cdnRegistering: 'Регистрация…',
+    cdnManual: 'Вставить конфиг вручную',
+    cdnManualDesc: 'Если авторегистрация недоступна — сгенерируйте конфиг через wgcf или аналог и вставьте сюда.',
+    cdnSaveConfig: 'Сохранить конфиг',
   );
 }
