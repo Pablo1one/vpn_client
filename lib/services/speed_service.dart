@@ -11,8 +11,6 @@ class SpeedData {
   static const empty = SpeedData();
 }
 
-/// Подключается к Clash API sing-box (:9090) для трафика и пинга.
-/// Пинг измеряется через /proxies/proxy/delay — реальная задержка через VPN.
 class SpeedService {
   static const _apiBase = 'http://127.0.0.1:9090';
   static const _pingUrl = 'http://cp.cloudflare.com/generate_204';
@@ -20,17 +18,43 @@ class SpeedService {
   final _controller = StreamController<SpeedData>.broadcast();
   http.Client? _client;
   Timer? _pingTimer;
+  Timer? _awgPollTimer;
   int _pingMs = -1;
   bool _active = false;
 
+  // AWG mode state
+  String? _awgInterface;
+  String? _awgHost;
+  int? _prevRx;
+  int? _prevTx;
+  DateTime? _prevSample;
+
   Stream<SpeedData> get stream => _controller.stream;
+
+  // ── Clash API (sing-box / xray) mode ──────────────────────────────────────
 
   void start() {
     if (_active) return;
     _active = true;
+    _awgInterface = null;
     _connectTrafficStream();
     _updatePing();
     _pingTimer = Timer.periodic(const Duration(seconds: 15), (_) => _updatePing());
+  }
+
+  // ── AWG mode (interface byte counters + ICMP ping) ────────────────────────
+
+  void startAwg({required String interfaceName, required String serverHost}) {
+    if (_active) return;
+    _active = true;
+    _awgInterface = interfaceName;
+    _awgHost = serverHost;
+    _prevRx = null;
+    _prevTx = null;
+    _prevSample = null;
+    _awgPollTimer = Timer.periodic(const Duration(seconds: 1), (_) => _pollAwgStats());
+    _updateAwgPing();
+    _pingTimer = Timer.periodic(const Duration(seconds: 15), (_) => _updateAwgPing());
   }
 
   void stop() {
@@ -39,9 +63,78 @@ class SpeedService {
     _client = null;
     _pingTimer?.cancel();
     _pingTimer = null;
+    _awgPollTimer?.cancel();
+    _awgPollTimer = null;
     _pingMs = -1;
+    _awgInterface = null;
+    _awgHost = null;
+    _prevRx = null;
+    _prevTx = null;
+    _prevSample = null;
     if (!_controller.isClosed) _controller.add(SpeedData.empty);
   }
+
+  Future<void> _pollAwgStats() async {
+    if (!_active) return;
+    try {
+      final result = await Process.run(
+        'powershell',
+        [
+          '-Command',
+          '(Get-NetAdapterStatistics -Name "$_awgInterface" -ErrorAction Stop)'
+              ' | Select-Object ReceivedBytes,SentBytes | ConvertTo-Json',
+        ],
+        runInShell: false,
+      );
+      if (result.exitCode != 0) return;
+      final j = jsonDecode(result.stdout as String) as Map<String, dynamic>;
+      final rx = (j['ReceivedBytes'] as num).toInt();
+      final tx = (j['SentBytes'] as num).toInt();
+      final now = DateTime.now();
+
+      if (_prevRx != null && _prevSample != null) {
+        final elapsed = now.difference(_prevSample!).inMilliseconds / 1000.0;
+        if (elapsed > 0) {
+          final rxBps = ((rx - _prevRx!) / elapsed).round().clamp(0, 999999999);
+          final txBps = ((tx - _prevTx!) / elapsed).round().clamp(0, 999999999);
+          if (!_controller.isClosed) {
+            _controller.add(SpeedData(
+              uploadBps: txBps,
+              downloadBps: rxBps,
+              pingMs: _pingMs,
+            ));
+          }
+        }
+      }
+      _prevRx = rx;
+      _prevTx = tx;
+      _prevSample = now;
+    } catch (_) {}
+  }
+
+  Future<void> _updateAwgPing() async {
+    if (!_active || _awgHost == null) return;
+    try {
+      final result = await Process.run(
+        'ping', ['-n', '1', '-w', '3000', _awgHost!],
+        runInShell: false,
+      );
+      final out = (result.stdout as String).toLowerCase();
+      final match = RegExp(r'time[<=](\d+)ms').firstMatch(out)
+          ?? RegExp(r'время[<=](\d+)мс').firstMatch(out);
+      if (match != null) {
+        _pingMs = int.parse(match.group(1)!);
+      } else if (out.contains('time<1ms') || out.contains('время<1мс')) {
+        _pingMs = 1;
+      } else {
+        _pingMs = -1;
+      }
+    } catch (_) {
+      _pingMs = -1;
+    }
+  }
+
+  // ── Clash API helpers ──────────────────────────────────────────────────────
 
   Future<void> _connectTrafficStream() async {
     while (_active) {
@@ -106,5 +199,23 @@ class SpeedService {
     if (bps < 1024) return '$bps B/s';
     if (bps < 1024 * 1024) return '${(bps / 1024).toStringAsFixed(1)} KB/s';
     return '${(bps / (1024 * 1024)).toStringAsFixed(2)} MB/s';
+  }
+
+  // Статический ICMP-пинг для проверки ключей (AWG/WG — UDP, TCP не работает)
+  static Future<int?> icmpPing(String host) async {
+    try {
+      final result = await Process.run(
+        'ping', ['-n', '1', '-w', '3000', host],
+        runInShell: false,
+      );
+      final out = (result.stdout as String).toLowerCase();
+      final match = RegExp(r'time[<=](\d+)ms').firstMatch(out)
+          ?? RegExp(r'время[<=](\d+)мс').firstMatch(out);
+      if (match != null) return int.parse(match.group(1)!);
+      if (out.contains('time<1ms') || out.contains('время<1мс')) return 1;
+      return null;
+    } catch (_) {
+      return null;
+    }
   }
 }

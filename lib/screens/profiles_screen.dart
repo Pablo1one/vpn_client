@@ -34,8 +34,10 @@ class ProfilesScreen extends StatelessWidget {
                   )
                 : IconButton(
                     icon: const Icon(Icons.network_ping_rounded),
-                    tooltip: 'Пинг',
-                    onPressed: vpn.pingAll,
+                    tooltip: vpn.isConnected
+                        ? 'Отключитесь для измерения пинга'
+                        : 'Пинг',
+                    onPressed: vpn.isConnected ? null : vpn.pingAll,
                   ),
         ],
       ),
