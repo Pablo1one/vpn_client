@@ -115,7 +115,7 @@ const _jsColors = AppColors(
 
 const _mcColors = AppColors(
   primary:       Color(0xFFCC1100),  // красный McQueen #95
-  secondary:     Color(0xFFFFCC00),  // жёлтый McQueen
+  secondary:     Color(0xFFFF2200),  // неоновый красный = цвет подключено + свечение
   upload:        Color(0xFFFFCC00),  // жёлтый для upload
   bg:            Color(0xFFF9F5F4),  // тёплый белый
   surface:       Color(0xFFFFFFFF),
@@ -126,8 +126,8 @@ const _mcColors = AppColors(
   textMuted:     Color(0xFF9A9A9A),
   border:        Color(0xFFEED8D6),
   borderFaint:   Color(0xFFF4E8E6),
-  btnInactive:   Color(0xFFE8D8D6),
-  btnActive:     Color(0xFFAA1008),
+  btnInactive:   Color(0xFFB0B0B0),  // серый = нет профиля
+  btnActive:     Color(0xFF888888),  // серый = есть профиль, не подключено
   avatarBg:      Color(0xFFFFF0EE),
 );
 

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:country_flags/country_flags.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -247,24 +248,80 @@ class _LanguageSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.ac;
-    return SegmentedButton<String>(
-      segments: const [
-        ButtonSegment(value: 'ru', label: Text('Русский')),
-        ButtonSegment(value: 'en', label: Text('English')),
+    final current = lang.locale.languageCode;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _LangButton(
+          countryCode: 'RU',
+          label: 'RU',
+          selected: current == 'ru',
+          onTap: () => lang.setLocale(const Locale('ru')),
+        ),
+        const SizedBox(width: 8),
+        _LangButton(
+          countryCode: 'US',
+          label: 'EN',
+          selected: current == 'en',
+          onTap: () => lang.setLocale(const Locale('en')),
+        ),
       ],
-      selected: {lang.locale.languageCode},
-      onSelectionChanged: (v) => lang.setLocale(Locale(v.first)),
-      style: ButtonStyle(
-        backgroundColor: WidgetStateProperty.resolveWith((s) =>
-            s.contains(WidgetState.selected)
-                ? c.primary.withOpacity(0.15)
-                : Colors.transparent),
-        foregroundColor: WidgetStateProperty.resolveWith((s) =>
-            s.contains(WidgetState.selected)
-                ? c.primary
-                : c.textMuted),
-        side: WidgetStateProperty.all(BorderSide(color: c.border)),
+    );
+  }
+}
+
+class _LangButton extends StatelessWidget {
+  final String countryCode;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _LangButton({
+    required this.countryCode,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ac;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            color: selected ? c.primary.withOpacity(0.12) : c.surface,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: selected ? c.primary.withOpacity(0.4) : c.border,
+              width: selected ? 1.5 : 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(2),
+                child: CountryFlag.fromCountryCode(
+                    countryCode, width: 20, height: 14),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight:
+                      selected ? FontWeight.w600 : FontWeight.w400,
+                  color: selected ? c.primary : c.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
