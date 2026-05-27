@@ -19,7 +19,26 @@ class ProfilesScreen extends StatelessWidget {
     final c = context.ac;
 
     return Scaffold(
-      appBar: AppBar(title: Text(s.profilesTab)),
+      appBar: AppBar(
+        title: Text(s.profilesTab),
+        actions: [
+          if (vpn.profiles.isNotEmpty)
+            vpn.pinging
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                : IconButton(
+                    icon: const Icon(Icons.network_ping_rounded),
+                    tooltip: 'Пинг',
+                    onPressed: vpn.pingAll,
+                  ),
+        ],
+      ),
       body: vpn.profiles.isEmpty
           ? Center(
               child: Column(
@@ -103,6 +122,8 @@ class _ProfileList extends StatelessWidget {
             _ProfileTile(
               profile: p,
               isActive: vpn.activeProfile?.id == p.id,
+              pingMs: vpn.pingResults[p.id],
+              hasPing: vpn.pingResults.containsKey(p.id),
               onTap: () => vpn.selectProfile(p),
               onDelete: () => _confirmDelete(context, vpn, p, s),
             ),
@@ -228,6 +249,8 @@ class _SubscriptionGroup extends StatelessWidget {
             _InlineProfileTile(
               profile: profiles[i],
               isActive: vpn.activeProfile?.id == profiles[i].id,
+              pingMs: vpn.pingResults[profiles[i].id],
+              hasPing: vpn.pingResults.containsKey(profiles[i].id),
               onTap: () => vpn.selectProfile(profiles[i]),
               onDelete: () => onDelete(profiles[i]),
             ),
@@ -244,17 +267,59 @@ class _SubscriptionGroup extends StatelessWidget {
   }
 }
 
+// ── Ping badge ────────────────────────────────────────────────────────────────
+
+class _PingBadge extends StatelessWidget {
+  final int? ms;
+  final bool hasPing;
+  const _PingBadge({required this.ms, required this.hasPing});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!hasPing) return const SizedBox.shrink();
+    final color = ms == null
+        ? Colors.red
+        : ms! < 150
+            ? const Color(0xFF44DD66)
+            : ms! < 400
+                ? Colors.orange
+                : Colors.red;
+    return Container(
+      margin: const EdgeInsets.only(right: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withOpacity(0.4)),
+      ),
+      child: Text(
+        ms == null ? '—' : '${ms}ms',
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: color,
+          letterSpacing: 0.3,
+        ),
+      ),
+    );
+  }
+}
+
 // ── Inline tile (inside subscription group) ───────────────────────────────────
 
 class _InlineProfileTile extends StatelessWidget {
   final VpnProfile profile;
   final bool isActive;
+  final int? pingMs;
+  final bool hasPing;
   final VoidCallback onTap;
   final VoidCallback onDelete;
 
   const _InlineProfileTile({
     required this.profile,
     required this.isActive,
+    required this.pingMs,
+    required this.hasPing,
     required this.onTap,
     required this.onDelete,
   });
@@ -304,6 +369,7 @@ class _InlineProfileTile extends StatelessWidget {
                   ],
                 ),
               ),
+              _PingBadge(ms: pingMs, hasPing: hasPing),
               if (isActive)
                 Padding(
                   padding: const EdgeInsets.only(right: 4),
@@ -340,12 +406,16 @@ class _InlineProfileTile extends StatelessWidget {
 class _ProfileTile extends StatelessWidget {
   final VpnProfile profile;
   final bool isActive;
+  final int? pingMs;
+  final bool hasPing;
   final VoidCallback onTap;
   final VoidCallback onDelete;
 
   const _ProfileTile({
     required this.profile,
     required this.isActive,
+    required this.pingMs,
+    required this.hasPing,
     required this.onTap,
     required this.onDelete,
   });
@@ -385,6 +455,7 @@ class _ProfileTile extends StatelessWidget {
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              _PingBadge(ms: pingMs, hasPing: hasPing),
               if (isActive)
                 Padding(
                   padding: const EdgeInsets.only(right: 4),

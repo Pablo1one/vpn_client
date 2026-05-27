@@ -93,4 +93,11 @@ class VpnProfile {
         VpnProtocol.amnezia =>
           config['server'] as String? ?? '',
       };
+
+  int get serverPort {
+    final raw = config['port'];
+    if (raw is int) return raw;
+    if (raw is String) return int.tryParse(raw) ?? 443;
+    return 443;
+  }
 }
