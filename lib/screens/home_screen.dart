@@ -8,6 +8,7 @@ import '../services/vpn_service.dart';
 import '../utils/config_builder.dart';
 import '../l10n/strings.dart';
 import '../theme.dart';
+import '../widgets/world_map_painter.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -18,9 +19,20 @@ class HomeScreen extends StatelessWidget {
     context.watch<LanguageProvider>();
     final s = L10n.of(context);
 
+    final c = context.ac;
     return Scaffold(
       appBar: AppBar(title: Text(s.vpnTab)),
-      body: Center(
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: CustomPaint(
+              painter: WorldMapPainter(
+                landColor: c.primary.withOpacity(0.055),
+                gridColor: c.borderFaint,
+              ),
+            ),
+          ),
+          Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -74,6 +86,8 @@ class HomeScreen extends StatelessWidget {
             ],
           ],
         ),
+          ),
+        ],
       ),
     );
   }
@@ -200,14 +214,19 @@ class _ConnectButtonState extends State<_ConnectButton>
         boxShadow: connected
             ? [
                 BoxShadow(
-                  color: c.secondary.withOpacity(0.40),
-                  blurRadius: 48,
-                  spreadRadius: 8,
+                  color: c.secondary.withOpacity(0.65),
+                  blurRadius: 20,
+                  spreadRadius: 4,
                 ),
                 BoxShadow(
-                  color: c.secondary.withOpacity(0.18),
-                  blurRadius: 90,
-                  spreadRadius: 20,
+                  color: c.secondary.withOpacity(0.38),
+                  blurRadius: 55,
+                  spreadRadius: 14,
+                ),
+                BoxShadow(
+                  color: c.secondary.withOpacity(0.16),
+                  blurRadius: 100,
+                  spreadRadius: 28,
                 ),
               ]
             : null,
