@@ -29,6 +29,8 @@ class VpnProvider extends ChangeNotifier {
   String? _error;
 
   bool _warpActive = false;
+  bool _awgMode = false;    // текущее подключение — AWG
+  String _awgServerHost = '';
 
   final _pingResults = <String, int?>{};  // profileId → ms, null = недоступен
   bool _pinging = false;
@@ -64,7 +66,14 @@ class VpnProvider extends ChangeNotifier {
         _status = s;
         if (s == VpnStatus.connected) {
           _connectedAt ??= DateTime.now();
-          _speed.start();
+          if (_awgMode) {
+            _speed.startAwg(
+              interfaceName: 'vpnclient_awg',
+              serverHost: _awgServerHost,
+            );
+          } else {
+            _speed.start();
+          }
         } else {
           _connectedAt = null;
           _speed.stop();
@@ -102,13 +111,15 @@ class VpnProvider extends ChangeNotifier {
     if (_activeProfile == null) return;
     _error = null;
     _warpActive = false;
+    _awgMode = false;
     _status = VpnStatus.connecting;
     notifyListeners();
     try {
       final profile = _activeProfile!;
 
       if (profile.protocol == VpnProtocol.amnezia && Platform.isWindows) {
-        // AWG — unchanged
+        _awgMode = true;
+        _awgServerHost = profile.serverHost;
         List<String>? bypassIps;
         if (_routingMode == RoutingMode.russiaBypass) {
           bypassIps = await _loadBypassAllowedIps();
@@ -200,22 +211,28 @@ class VpnProvider extends ChangeNotifier {
 
     await Future.wait(_profiles.map((p) async {
       final host = p.serverHost;
-      final port = p.serverPort;
       if (host.isEmpty) {
         _pingResults[p.id] = null;
+        notifyListeners();
         return;
       }
-      try {
-        final sw = Stopwatch()..start();
-        final sock = await Socket.connect(
-          host, port,
-          timeout: const Duration(seconds: 5),
-        );
-        sw.stop();
-        await sock.close();
-        _pingResults[p.id] = sw.elapsedMilliseconds;
-      } catch (_) {
-        _pingResults[p.id] = null;
+      final isUdp = p.protocol == VpnProtocol.amnezia ||
+          p.protocol == VpnProtocol.wireguard;
+      if (isUdp) {
+        _pingResults[p.id] = await SpeedService.icmpPing(host);
+      } else {
+        try {
+          final sw = Stopwatch()..start();
+          final sock = await Socket.connect(
+            host, p.serverPort,
+            timeout: const Duration(seconds: 5),
+          );
+          sw.stop();
+          await sock.close();
+          _pingResults[p.id] = sw.elapsedMilliseconds;
+        } catch (_) {
+          _pingResults[p.id] = null;
+        }
       }
       notifyListeners();
     }));
@@ -226,6 +243,7 @@ class VpnProvider extends ChangeNotifier {
 
   Future<void> disconnect() async {
     _warpActive = false;
+    _awgMode = false;
     _status = VpnStatus.disconnecting;
     notifyListeners();
     await _vpn.disconnect();
