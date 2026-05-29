@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import '../models/profile.dart';
 
 enum RoutingMode { fullVpn, russiaBypass, custom }
@@ -16,25 +17,50 @@ class ConfigBuilder {
     RoutingMode routingMode = RoutingMode.fullVpn,
     bool killSwitch = false,
     List<String> bypassDomains = const [],
+    List<String> ruCidrs = const [],
   }) {
     final Map<String, dynamic> outbound = switch (profile.protocol) {
-      VpnProtocol.vless => _singboxVless(profile.config),
+      // dns-direct: резолв адреса сервера напрямую, без петли через proxy
+      VpnProtocol.vless => _singboxVless(profile.config)
+        ..['domain_resolver'] = {'server': 'dns-direct', 'strategy': 'prefer_ipv4'},
       VpnProtocol.tuic => _tuic(profile.config),
       VpnProtocol.hysteria2 => _hysteria2(profile.config),
       _ => throw ArgumentError('build: unsupported protocol ${profile.protocol}'),
     };
 
+    final serverAddress = profile.config['server'] as String? ?? '';
     final rules = <Map<String, dynamic>>[
       {'ip_is_private': true, 'outbound': 'direct'},
+    ];
+    if (serverAddress.isNotEmpty) {
+      final isIp = RegExp(r'^\d{1,3}(\.\d{1,3}){3}$').hasMatch(serverAddress);
+      rules.add({
+        if (isIp) 'ip_cidr': [serverAddress] else 'domain': [serverAddress],
+        'outbound': 'direct',
+      });
+    }
+    rules.addAll([
       {'action': 'sniff'},
       {'action': 'hijack-dns', 'protocol': 'dns'},
-    ];
+    ]);
+    if (routingMode == RoutingMode.russiaBypass && ruCidrs.isNotEmpty) {
+      rules.add({'ip_cidr': ruCidrs, 'outbound': 'direct'});
+    }
 
     return {
       'log': {'level': 'info'},
       'dns': {
         'servers': [
-          {'address': '8.8.8.8', 'detour': 'direct', 'tag': 'dns'},
+          {
+            'address': '8.8.8.8',
+            'detour': routingMode == RoutingMode.fullVpn ? 'proxy' : 'direct',
+            'tag': 'dns',
+          },
+          {
+            'address': '1.1.1.1',
+            'detour': 'direct',
+            'tag': 'dns-direct',
+          },
         ],
       },
       'inbounds': [
@@ -42,7 +68,7 @@ class ConfigBuilder {
           'type': 'tun',
           'tag': 'tun-in',
           'address': ['172.19.0.1/30', 'fdfe:dcba:9876::1/126'],
-          'mtu': 9000,
+          'mtu': 1400,
           'auto_route': true,
           'strict_route': killSwitch,
           'stack': 'mixed',
@@ -53,7 +79,6 @@ class ConfigBuilder {
         {
           'type': 'direct',
           'tag': 'direct',
-          'domain_resolver': {'server': 'dns', 'strategy': 'prefer_ipv4'},
         },
       ],
       'route': {
@@ -65,7 +90,10 @@ class ConfigBuilder {
   }
 
   // tun форвардер: только ipv4 tun → socks5 10808
-  static Map<String, dynamic> buildTun() => {
+  static Map<String, dynamic> buildTun({
+    bool killSwitch = false,
+    RoutingMode routingMode = RoutingMode.fullVpn,
+  }) => {
         'log': {'level': 'info'},
         'experimental': {
           'clash_api': {
@@ -75,7 +103,11 @@ class ConfigBuilder {
         },
         'dns': {
           'servers': [
-            {'address': '8.8.8.8', 'detour': 'direct', 'tag': 'dns'},
+            {
+              'address': '8.8.8.8',
+              'detour': routingMode == RoutingMode.fullVpn ? 'proxy' : 'direct',
+              'tag': 'dns',
+            },
           ],
         },
         'inbounds': [
@@ -84,7 +116,7 @@ class ConfigBuilder {
             'tag': 'tun-in',
             'interface_name': 'tun0',
             'address': ['172.19.0.1/30'],
-            'mtu': 9000,
+            'mtu': 1400,
             'auto_route': true,
             'strict_route': true,
             'stack': 'mixed',
@@ -127,10 +159,13 @@ class ConfigBuilder {
     List<String> ruCidrs = const [],
   }) {
     final c = profile.config;
-    final flow = (c['flow'] as String? ?? '').trim();
+    final transport = (c['transport'] as String? ?? 'tcp').trim();
+    final rawFlow = (c['flow'] as String? ?? '').trim();
+    // gRPC не совместим с xtls flow — xray упадёт молча
+    final flow = (transport == 'grpc') ? '' : rawFlow;
 
     final config = {
-      'log': {'loglevel': 'warning'},
+      'log': {'loglevel': 'info'},
       'inbounds': [
         {
           'listen': '127.0.0.1',
@@ -166,28 +201,43 @@ class ConfigBuilder {
           'tag': 'direct',
         },
       ],
-      'routing': _xrayRouting(routingMode: routingMode, ruCidrs: ruCidrs),
+      'routing': _xrayRouting(
+        routingMode: routingMode,
+        ruCidrs: ruCidrs,
+        serverAddress: c['server'] as String?,
+      ),
     };
 
     return const JsonEncoder.withIndent('  ').convert(config);
   }
 
-  // singbox socks5 прокси для tuic/h2 — ip маршрутизация
+  // singbox socks5 прокси для tuic/h2/vless-grpc — ip маршрутизация
   static Map<String, dynamic> buildSingboxProxy(
     VpnProfile profile, {
     RoutingMode routingMode = RoutingMode.fullVpn,
     List<String> ruCidrs = const [],
   }) {
     final outbound = switch (profile.protocol) {
+      // dns-direct — bootstrap DNS для резолва хоста сервера без循环
+      VpnProtocol.vless => _singboxVless(profile.config)
+        ..['domain_resolver'] = {'server': 'dns-direct', 'strategy': 'prefer_ipv4'},
       VpnProtocol.tuic => _tuic(profile.config),
       VpnProtocol.hysteria2 => _hysteria2(profile.config),
       _ => throw ArgumentError(
           'buildSingboxProxy: unsupported protocol ${profile.protocol}'),
     };
 
+    final serverAddress = profile.config['server'] as String? ?? '';
     final rules = <Map<String, dynamic>>[
       {'ip_is_private': true, 'outbound': 'direct'},
     ];
+    if (serverAddress.isNotEmpty) {
+      final isIp = RegExp(r'^\d{1,3}(\.\d{1,3}){3}$').hasMatch(serverAddress);
+      rules.add({
+        if (isIp) 'ip_cidr': [serverAddress] else 'domain': [serverAddress],
+        'outbound': 'direct',
+      });
+    }
     if (routingMode == RoutingMode.russiaBypass && ruCidrs.isNotEmpty) {
       rules.add({'ip_cidr': ruCidrs, 'outbound': 'direct'});
     }
@@ -196,7 +246,17 @@ class ConfigBuilder {
       'log': {'level': 'info'},
       'dns': {
         'servers': [
-          {'address': '8.8.8.8', 'detour': 'direct', 'tag': 'dns'},
+          {
+            'address': '8.8.8.8',
+            'detour': routingMode == RoutingMode.fullVpn ? 'proxy' : 'direct',
+            'tag': 'dns',
+          },
+          // bootstrap: резолвим адрес прокси-сервера напрямую
+          {
+            'address': '1.1.1.1',
+            'detour': 'direct',
+            'tag': 'dns-direct',
+          },
         ],
       },
       'inbounds': [
@@ -212,11 +272,10 @@ class ConfigBuilder {
         {
           'type': 'direct',
           'tag': 'direct',
-          'domain_resolver': {'server': 'dns', 'strategy': 'prefer_ipv4'},
+          'domain_resolver': {'server': 'dns-direct', 'strategy': 'prefer_ipv4'},
         },
       ],
       'route': {
-        'auto_detect_interface': true,
         'rules': rules,
         'final': 'proxy',
       },
@@ -229,18 +288,19 @@ class ConfigBuilder {
   }) {
     final c = profile.config;
     final buf = StringBuffer();
-    final dns = c['dns'] as String? ?? '1.1.1.1';
+    final dns = (c['dns'] as String? ?? '1.1.1.1').trim();
 
     buf.writeln('[Interface]');
     buf.writeln('PrivateKey = ${c['privateKey']}');
     buf.writeln('Address = ${c['address']}');
     buf.writeln('DNS = $dns');
-    final mtu = c['mtu'];
-    if (mtu != null) buf.writeln('MTU = $mtu');
+    final profileMtu = c['mtu'] as int? ?? 1280;
+    final mtu = Platform.isWindows && profileMtu < 1400 ? 1400 : profileMtu;
+    buf.writeln('MTU = $mtu');
 
+    // AWG-параметры обфускации
     const awgParamKeys = [
-      'Jc', 'Jmin', 'Jmax', 'S1', 'S2', 'S3', 'S4',
-      'H1', 'H2', 'H3', 'H4',
+      'Jc', 'Jmin', 'Jmax', 'S1', 'S2', 'S3', 'S4', 'H1', 'H2', 'H3', 'H4',
     ];
     for (final k in awgParamKeys) {
       final v = c[k.toLowerCase()];
@@ -259,11 +319,14 @@ class ConfigBuilder {
         buf.writeln('AllowedIPs = $cidr');
       }
     } else {
-      final fallback = c['allowedIPs'] as String? ?? '0.0.0.0/0, ::/0';
-      buf.writeln('AllowedIPs = $fallback');
+      // fullVpn: всегда полный тоннель, игнорируем AllowedIPs из профиля
+      // (профиль AmneziaVPN может содержать только русские CIDR из split-tunnel экспорта)
+      buf.writeln('AllowedIPs = 0.0.0.0/0, ::/0');
     }
 
-    buf.writeln('PersistentKeepalive = 25');
+    // Keepalive из профиля или дефолт 25 (как в AmneziaVPN)
+    final keepalive = c['persistentKeepalive'] ?? c['keepalive'] ?? 25;
+    buf.writeln('PersistentKeepalive = $keepalive');
     return buf.toString();
   }
 
@@ -329,10 +392,22 @@ class ConfigBuilder {
   static Map<String, dynamic> _xrayRouting({
     required RoutingMode routingMode,
     required List<String> ruCidrs,
+    String? serverAddress,
   }) {
     final rules = <Map<String, dynamic>>[
       {'type': 'field', 'ip': _kPrivateCidrs, 'outboundTag': 'direct'},
     ];
+
+    // Явный direct для сервера VPN — защита от петли, если process_name exclusion
+    // в TUN sing-box не сработает (трафик xray.exe попадёт обратно в xray)
+    if (serverAddress != null && serverAddress.isNotEmpty) {
+      final isIp = RegExp(r'^\d{1,3}(\.\d{1,3}){3}$').hasMatch(serverAddress);
+      rules.add({
+        'type': 'field',
+        if (isIp) 'ip': [serverAddress] else 'domain': [serverAddress],
+        'outboundTag': 'direct',
+      });
+    }
 
     if (routingMode == RoutingMode.russiaBypass && ruCidrs.isNotEmpty) {
       rules.add({'type': 'field', 'ip': ruCidrs, 'outboundTag': 'direct'});
@@ -346,7 +421,8 @@ class ConfigBuilder {
   static Map<String, dynamic> _singboxVless(Map<String, dynamic> c) {
     final transport = c['transport'] as String? ?? 'tcp';
     final security = c['security'] as String? ?? 'none';
-    final flow = (c['flow'] as String? ?? '').trim();
+    final rawFlow = (c['flow'] as String? ?? '').trim();
+    final flow = (transport == 'grpc') ? '' : rawFlow;
 
     final out = <String, dynamic>{
       'type': 'vless',
@@ -381,7 +457,16 @@ class ConfigBuilder {
           'headers': {'Host': c['host'] ?? c['sni']},
         };
       case 'grpc':
-        out['transport'] = {'type': 'grpc', 'service_name': c['serviceName'] ?? ''};
+        out['transport'] = {
+          'type': 'grpc',
+          'service_name': c['serviceName'] ?? '',
+        };
+      case 'xhttp':
+        out['transport'] = {
+          'type': 'xhttp',
+          'path': c['path'] ?? '/',
+          'host': c['sni'] ?? c['server'],
+        };
       case 'httpupgrade':
       case 'http':
         out['transport'] = {

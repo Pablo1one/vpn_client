@@ -23,7 +23,6 @@ class LogService {
       _lines.removeRange(0, _lines.length - _maxLines);
     }
     if (!_controller.isClosed) _controller.add(List.unmodifiable(_lines));
-    _autoClear();
   }
 
   void clear() {

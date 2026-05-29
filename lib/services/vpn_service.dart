@@ -9,6 +9,8 @@ import 'log_service.dart';
 enum VpnStatus { disconnected, connecting, connected, disconnecting, error }
 
 abstract class VpnService {
+  static const kAwgTunnelName = 'vpnclient_awg';
+
   Stream<VpnStatus> get statusStream;
   Future<void> connect(String singboxConfigJson,
       {List<String> excludedApps = const []});
@@ -100,7 +102,7 @@ class _WindowsVpnService implements VpnService {
   File? _proxyConfigFile;
 
   bool _awgActive = false;
-  static const _awgTunnelName = 'vpnclient_awg';
+  static const _awgTunnelName = VpnService.kAwgTunnelName;
   static const _regPath =
       r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings';
 
@@ -336,6 +338,7 @@ class _WindowsVpnService implements VpnService {
     _controller.add(VpnStatus.connecting);
     try {
       await _ensureWintun();
+      await _uninstallAwgTunnel();
       await _killExistingProcess();
 
       if (xrayConfigJson != null) {
@@ -367,6 +370,7 @@ class _WindowsVpnService implements VpnService {
         throw Exception('sing-box.exe не найден\nОжидается: ${exe.path}');
       }
       await _ensureWintun();
+      await _uninstallAwgTunnel();
       await _killExistingProcess();
       await _launchTun(configJson);
       _controller.add(VpnStatus.connected);
@@ -384,6 +388,28 @@ class _WindowsVpnService implements VpnService {
       if (!awgExe.existsSync()) {
         throw Exception('amneziawg.exe не найден\nОжидается: ${awgExe.path}');
       }
+
+      // Убиваем только TUN (sing-box/xray) — amneziawg не трогаем,
+      // иначе Windows Service Manager получает process в FAILED-состоянии
+      // и последующий uninstall/install может сломаться
+      await Process.run('taskkill', ['/F', '/IM', 'sing-box.exe'], runInShell: false);
+      await Process.run('taskkill', ['/F', '/IM', 'xray.exe'], runInShell: false);
+      await Future.delayed(const Duration(milliseconds: 1000));
+      await _removeTunAdapter();
+      await _killProxy();
+      await _outSub?.cancel(); _outSub = null;
+      await _errSub?.cancel(); _errSub = null;
+      if (_process != null) {
+        final old = _process!;
+        _process = null;
+        old.kill(ProcessSignal.sigterm);
+        await old.exitCode
+            .timeout(const Duration(seconds: 3),
+                onTimeout: () { old.kill(); return -1; })
+            .catchError((_) => -1);
+      }
+      try { await _configFile?.delete(); } catch (_) {}
+      _configFile = null;
 
       await _uninstallAwgTunnel();
 
@@ -403,12 +429,87 @@ class _WindowsVpnService implements VpnService {
       }
 
       await _waitForAwgHandshake();
+      await _disableAwgOffload();
+      await _ensureBypassRoute(confContent);
       _awgActive = true;
       _controller.add(VpnStatus.connected);
     } catch (e) {
       _controller.add(VpnStatus.error);
       rethrow;
     }
+  }
+
+  // Добавляет /32-маршрут для IP сервера через физический интерфейс.
+  // /installtunnelservice не добавляет bypass-маршрут сам — без него
+  // зашифрованные AWG UDP-пакеты уходят обратно в туннель (петля) → upload ≈ 0.
+  Future<void> _ensureBypassRoute(String confContent) async {
+    final match = RegExp(
+      r'^Endpoint\s*=\s*([^\s:]+):\d+',
+      multiLine: true,
+      caseSensitive: false,
+    ).firstMatch(confContent);
+    if (match == null) return;
+
+    final host = match.group(1)!.trim();
+    String? serverIp;
+    if (RegExp(r'^\d{1,3}(\.\d{1,3}){3}$').hasMatch(host)) {
+      serverIp = host;
+    } else {
+      try {
+        final addrs = await InternetAddress.lookup(host)
+            .timeout(const Duration(seconds: 5));
+        serverIp = addrs
+            .where((a) => a.type == InternetAddressType.IPv4)
+            .map((a) => a.address)
+            .firstOrNull;
+      } catch (_) {}
+    }
+    if (serverIp == null) return;
+
+    // Ищем дефолтный шлюз на физическом интерфейсе (не AWG)
+    final gwResult = await Process.run(
+      'powershell',
+      [
+        '-Command',
+        r'$r = Get-NetRoute -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue'
+            ' | Where-Object { \$_.InterfaceAlias -ne "$_awgTunnelName" }'
+            r' | Sort-Object RouteMetric | Select-Object -First 1;'
+            r' if ($r) { "$($r.NextHop)|$($r.InterfaceIndex)" }',
+      ],
+      runInShell: false,
+    );
+    final gwLine = (gwResult.stdout as String).trim();
+    if (!gwLine.contains('|')) return;
+
+    final gateway = gwLine.split('|')[0].trim();
+    final ifIndex = gwLine.split('|')[1].trim();
+    if (gateway.isEmpty || gateway == '0.0.0.0' || ifIndex.isEmpty) return;
+
+    await Process.run(
+      'powershell',
+      [
+        '-Command',
+        'New-NetRoute -DestinationPrefix "$serverIp/32"'
+            ' -InterfaceIndex $ifIndex -NextHop "$gateway"'
+            ' -RouteMetric 1 -ErrorAction SilentlyContinue',
+      ],
+      runInShell: false,
+    );
+    LogService().add('[awg] bypass route: $serverIp/32 → $gateway (if$ifIndex)');
+  }
+
+  Future<void> _disableAwgOffload() async {
+    try {
+      await Process.run(
+        'powershell',
+        [
+          '-Command',
+          'Disable-NetAdapterLso -Name "$_awgTunnelName" -ErrorAction SilentlyContinue',
+        ],
+        runInShell: false,
+      );
+      LogService().add('[awg] LSO/checksum offload disabled');
+    } catch (_) {}
   }
 
   Future<void> _waitForAwgHandshake() async {
@@ -427,12 +528,16 @@ class _WindowsVpnService implements VpnService {
       );
       if ((r.stdout as String).contains('latest handshake:')) return;
     }
+    throw Exception(
+      'Туннель установлен, но сервер не отвечает.\n'
+      'Проверьте ключ или доступность сервера.',
+    );
   }
 
   Future<void> _uninstallAwgTunnel() async {
-    if (!_awgActive) return;
     _awgActive = false;
     final awgExe = '$_binDir\\amneziawg.exe';
+    // Всегда пробуем удалить — если туннеля нет, amneziawg вернёт ненулевой код, игнорируем
     await Process.run(awgExe, ['/uninstalltunnelservice', _awgTunnelName],
         runInShell: false);
     await Future.delayed(const Duration(milliseconds: 500));
@@ -449,6 +554,7 @@ class _WindowsVpnService implements VpnService {
     await _clearSystemProxy();
     await Process.run('taskkill', ['/F', '/IM', 'sing-box.exe'], runInShell: false);
     await Process.run('taskkill', ['/F', '/IM', 'xray.exe'], runInShell: false);
+    await _uninstallAwgTunnel();
   }
 
   @override
