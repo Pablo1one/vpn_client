@@ -8,8 +8,6 @@ import '../services/vpn_service.dart';
 import '../utils/config_builder.dart';
 import '../l10n/strings.dart';
 import '../theme.dart';
-import '../widgets/world_map_painter.dart';
-
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
@@ -22,17 +20,7 @@ class HomeScreen extends StatelessWidget {
     final c = context.ac;
     return Scaffold(
       appBar: AppBar(title: const Text('LightningMcQueen')),
-      body: Stack(
-        children: [
-          Positioned.fill(
-            child: CustomPaint(
-              painter: WorldMapPainter(
-                landColor: c.primary.withOpacity(0.055),
-                gridColor: c.borderFaint,
-              ),
-            ),
-          ),
-          Center(
+      body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -86,8 +74,6 @@ class HomeScreen extends StatelessWidget {
             ],
           ],
         ),
-          ),
-        ],
       ),
     );
   }

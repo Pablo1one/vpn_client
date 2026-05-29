@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -39,6 +38,9 @@ class VpnProvider extends ChangeNotifier {
   String? _activeCountryCode;
   final _refreshing = <String>{};  // urls currently being refreshed
 
+  List<String>? _cachedRuCidrs;
+  List<String>? _cachedBypassAllowedIps;
+
   VpnStatus get status => _status;
   VpnProfile? get activeProfile => _activeProfile;
   List<VpnProfile> get profiles => List.from(_profiles);
@@ -68,7 +70,7 @@ class VpnProvider extends ChangeNotifier {
           _connectedAt ??= DateTime.now();
           if (_awgMode) {
             _speed.startAwg(
-              interfaceName: 'vpnclient_awg',
+              interfaceName: VpnService.kAwgTunnelName,
               serverHost: _awgServerHost,
             );
           } else {
@@ -130,20 +132,36 @@ class VpnProvider extends ChangeNotifier {
         );
         await _vpn.connectAwg(conf);
       } else if (Platform.isWindows && profile.protocol == VpnProtocol.vless) {
-        // VLESS — Xray router on :10808 + TUN sing-box forwarder
+        final transport = (profile.config['transport'] as String? ?? 'tcp').trim();
         final ruCidrs = _routingMode == RoutingMode.russiaBypass
             ? await _loadRuCidrs()
             : <String>[];
-        final xrayJson = ConfigBuilder.buildXrayVless(
-          profile,
-          routingMode: _routingMode,
-          ruCidrs: ruCidrs,
-        );
-        final tunConfig = ConfigBuilder.buildTun();
-        await _vpn.connectProxy(
-          xrayConfigJson: xrayJson,
-          tunConfigJson: ConfigBuilder.toJson(tunConfig),
-        );
+        if (transport == 'grpc') {
+          // gRPC через sing-box TUN: xray 26.x deprecated gRPC — REFUSED_STREAM
+          final config = ConfigBuilder.build(
+            profile,
+            routingMode: _routingMode,
+            killSwitch: _killSwitch,
+            bypassDomains: _bypassDomains,
+            ruCidrs: ruCidrs,
+          );
+          await _vpn.connect(ConfigBuilder.toJson(config));
+        } else {
+          // tcp, ws, xhttp, httpupgrade через xray
+          final xrayJson = ConfigBuilder.buildXrayVless(
+            profile,
+            routingMode: _routingMode,
+            ruCidrs: ruCidrs,
+          );
+          final tunConfig = ConfigBuilder.buildTun(
+            killSwitch: _killSwitch,
+            routingMode: _routingMode,
+          );
+          await _vpn.connectProxy(
+            xrayConfigJson: xrayJson,
+            tunConfigJson: ConfigBuilder.toJson(tunConfig),
+          );
+        }
       } else if (Platform.isWindows &&
           (profile.protocol == VpnProtocol.tuic ||
               profile.protocol == VpnProtocol.hysteria2)) {
@@ -156,7 +174,10 @@ class VpnProvider extends ChangeNotifier {
           routingMode: _routingMode,
           ruCidrs: ruCidrs,
         );
-        final tunConfig = ConfigBuilder.buildTun();
+        final tunConfig = ConfigBuilder.buildTun(
+          killSwitch: _killSwitch,
+          routingMode: _routingMode,
+        );
         await _vpn.connectProxy(
           singboxConfigJson: ConfigBuilder.toJson(proxyConfig),
           tunConfigJson: ConfigBuilder.toJson(tunConfig),
@@ -209,33 +230,48 @@ class VpnProvider extends ChangeNotifier {
     _pingResults.clear();
     notifyListeners();
 
-    await Future.wait(_profiles.map((p) async {
-      final host = p.serverHost;
-      if (host.isEmpty) {
-        _pingResults[p.id] = null;
-        notifyListeners();
-        return;
-      }
-      final isUdp = p.protocol == VpnProtocol.amnezia ||
-          p.protocol == VpnProtocol.wireguard;
-      if (isUdp) {
-        _pingResults[p.id] = await SpeedService.icmpPing(host);
-      } else {
-        try {
-          final sw = Stopwatch()..start();
-          final sock = await Socket.connect(
-            host, p.serverPort,
-            timeout: const Duration(seconds: 5),
-          );
-          sw.stop();
-          await sock.close();
-          _pingResults[p.id] = sw.elapsedMilliseconds;
-        } catch (_) {
+    for (var i = 0; i < _profiles.length; i += 5) {
+      final batch = _profiles.skip(i).take(5).toList();
+      await Future.wait(batch.map((p) async {
+        final host = p.serverHost;
+        if (host.isEmpty) {
           _pingResults[p.id] = null;
+          notifyListeners();
+          return;
         }
-      }
-      notifyListeners();
-    }));
+        final isUdp = p.protocol == VpnProtocol.amnezia ||
+            p.protocol == VpnProtocol.wireguard;
+        if (isUdp) {
+          var ms = await SpeedService.icmpPing(host);
+          if (ms == null) {
+            // ICMP часто блокируется на VPN-серверах — пробуем TCP 443
+            try {
+              final sw = Stopwatch()..start();
+              final sock = await Socket.connect(host, 443,
+                  timeout: const Duration(seconds: 2));
+              sw.stop();
+              await sock.close();
+              ms = sw.elapsedMilliseconds;
+            } catch (_) {}
+          }
+          _pingResults[p.id] = ms;
+        } else {
+          try {
+            final sw = Stopwatch()..start();
+            final sock = await Socket.connect(
+              host, p.serverPort,
+              timeout: const Duration(seconds: 5),
+            );
+            sw.stop();
+            await sock.close();
+            _pingResults[p.id] = sw.elapsedMilliseconds;
+          } catch (_) {
+            _pingResults[p.id] = null;
+          }
+        }
+        notifyListeners();
+      }));
+    }
 
     _pinging = false;
     notifyListeners();
@@ -320,13 +356,19 @@ class VpnProvider extends ChangeNotifier {
 
   Future<void> _doFetchCountry(String host) async {
     try {
+      String ip = host;
+      if (!RegExp(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$').hasMatch(host)) {
+        final addrs = await InternetAddress.lookup(host)
+            .timeout(const Duration(seconds: 5));
+        if (addrs.isEmpty) return;
+        ip = addrs.first.address;
+      }
       final resp = await http
-          .get(Uri.parse('http://ip-api.com/json/$host?fields=countryCode'))
+          .get(Uri.parse('https://ipinfo.io/$ip/country'))
           .timeout(const Duration(seconds: 6));
       if (resp.statusCode == 200) {
-        final data = jsonDecode(resp.body) as Map<String, dynamic>;
-        final code = data['countryCode'] as String?;
-        if (code != null && code.isNotEmpty) {
+        final code = resp.body.trim().toUpperCase();
+        if (code.length == 2) {
           _countryCache[host] = code;
           if (_activeProfile?.serverHost == host) {
             _activeCountryCode = code;
@@ -366,13 +408,15 @@ class VpnProvider extends ChangeNotifier {
   }
 
   Future<List<String>> _loadRuCidrs() async {
+    if (_cachedRuCidrs != null) return _cachedRuCidrs!;
     try {
       final data = await rootBundle.loadString('assets/data/iplist_ru.txt');
-      return data
+      _cachedRuCidrs = data
           .split('\n')
           .map((l) => l.trim())
           .where((l) => l.isNotEmpty && !l.startsWith('#'))
           .toList();
+      return _cachedRuCidrs!;
     } catch (e) {
       debugPrint('iplist_ru load error: $e');
       return [];
@@ -380,14 +424,16 @@ class VpnProvider extends ChangeNotifier {
   }
 
   Future<List<String>> _loadBypassAllowedIps() async {
+    if (_cachedBypassAllowedIps != null) return _cachedBypassAllowedIps!;
     try {
       final data =
           await rootBundle.loadString('assets/data/allowed_ips_bypass.txt');
-      return data
+      _cachedBypassAllowedIps = data
           .split('\n')
           .map((l) => l.trim())
           .where((l) => l.isNotEmpty && !l.startsWith('#'))
           .toList();
+      return _cachedBypassAllowedIps!;
     } catch (e) {
       debugPrint('allowed_ips_bypass load error: $e');
       return [];
