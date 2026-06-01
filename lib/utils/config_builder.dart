@@ -67,7 +67,10 @@ class ConfigBuilder {
         {
           'type': 'tun',
           'tag': 'tun-in',
-          'address': ['172.19.0.1/30', 'fdfe:dcba:9876::1/126'],
+          'interface_name': 'tun0',
+          // только IPv4: на Windows с отключённым IPv6 назначение IPv6-адреса
+          // на TUN падает с "set ipv6 address: Element not found"
+          'address': ['172.19.0.1/30'],
           'mtu': 1400,
           'auto_route': true,
           'strict_route': killSwitch,
@@ -84,6 +87,7 @@ class ConfigBuilder {
       'route': {
         'auto_detect_interface': true,
         'final': 'proxy',
+        'default_domain_resolver': {'server': 'dns-direct', 'strategy': 'prefer_ipv4'},
         'rules': rules,
       },
     };
@@ -140,6 +144,8 @@ class ConfigBuilder {
         'route': {
           'auto_detect_interface': true,
           'final': 'proxy',
+          // sing-box 1.12: глобальный резолвер доменов (иначе первый резолв буксует → "нет интернета")
+          'default_domain_resolver': {'server': 'dns', 'strategy': 'prefer_ipv4'},
           'rules': [
             // исключаем свои процессы чтобы не было петли маршрутизации
             {
