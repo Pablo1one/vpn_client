@@ -29,6 +29,7 @@ class VpnProvider extends ChangeNotifier {
 
   bool _warpActive = false;
   bool _awgMode = false;    // текущее подключение — AWG
+  bool _cancelRequested = false;  // пользователь прервал подключение
   String _awgServerHost = '';
 
   final _pingResults = <String, int?>{};  // profileId → ms, null = недоступен
@@ -114,6 +115,7 @@ class VpnProvider extends ChangeNotifier {
     _error = null;
     _warpActive = false;
     _awgMode = false;
+    _cancelRequested = false;
     _status = VpnStatus.connecting;
     notifyListeners();
     try {
@@ -196,10 +198,30 @@ class VpnProvider extends ChangeNotifier {
         );
       }
     } catch (e) {
+      // отмена пользователем в процессе подключения — не показываем ошибку
+      if (_cancelRequested) {
+        _cancelRequested = false;
+        return;
+      }
       _status = VpnStatus.error;
       _error = e.toString().replaceFirst('UnimplementedError: ', '');
       notifyListeners();
     }
+  }
+
+  // Прерывание подключения в процессе (пользователь нажал отмену)
+  Future<void> cancelConnect() async {
+    _cancelRequested = true;
+    _warpActive = false;
+    _awgMode = false;
+    _status = VpnStatus.disconnecting;
+    notifyListeners();
+    try {
+      await _vpn.cleanup();
+    } catch (_) {}
+    _status = VpnStatus.disconnected;
+    _error = null;
+    notifyListeners();
   }
 
   Future<void> connectWarp() async {
@@ -239,8 +261,11 @@ class VpnProvider extends ChangeNotifier {
           notifyListeners();
           return;
         }
+        // UDP/QUIC-протоколы: их порты не принимают TCP — пингуем ICMP + фоллбэк TCP 443
         final isUdp = p.protocol == VpnProtocol.amnezia ||
-            p.protocol == VpnProtocol.wireguard;
+            p.protocol == VpnProtocol.wireguard ||
+            p.protocol == VpnProtocol.tuic ||
+            p.protocol == VpnProtocol.hysteria2;
         if (isUdp) {
           var ms = await SpeedService.icmpPing(host);
           if (ms == null) {
@@ -307,15 +332,39 @@ class VpnProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> removeSubscription(String url) async {
+    final ids = _profiles
+        .where((p) => p.subscriptionUrl == url)
+        .map((p) => p.id)
+        .toList();
+    if (ids.isEmpty) return;
+    if (_activeProfile != null && ids.contains(_activeProfile!.id)) {
+      await disconnect();
+      _activeProfile = null;
+    }
+    for (final id in ids) {
+      await _repo.remove(id);
+    }
+    _profiles = _repo.getAll().toList();
+    notifyListeners();
+  }
+
   Future<void> selectProfile(VpnProfile profile) async {
-    final wasConnected = isConnected;
+    // авто-переподключение при смене активного профиля
+    final wasActive = isConnected ||
+        _status == VpnStatus.connecting ||
+        _status == VpnStatus.error && _activeProfile != null;
     _activeProfile = profile;
     _activeCountryCode = _countryCache[profile.serverHost];
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('lastProfileId', profile.id);
     notifyListeners();
     _fetchCountry(profile.serverHost);
-    if (wasConnected) await connect();
+    if (wasActive) {
+      // сначала чистое отключение старого (без гонки статусов), затем коннект к новому
+      await disconnect();
+      await connect();
+    }
   }
 
   Future<void> refreshSubscription(String url) async {

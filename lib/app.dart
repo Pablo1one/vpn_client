@@ -123,8 +123,8 @@ class _ShellState extends State<_Shell> with WindowListener {
             label: s.vpnTab,
           ),
           NavigationDestination(
-            icon: const Icon(Icons.list_alt_outlined),
-            selectedIcon: const Icon(Icons.list_alt_rounded),
+            icon: const Icon(Icons.vpn_key_outlined),
+            selectedIcon: const Icon(Icons.vpn_key_rounded),
             label: s.profilesTab,
           ),
           NavigationDestination(
