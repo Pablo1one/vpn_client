@@ -25,6 +25,10 @@ class L10n {
   final String warpDesc;
   final String dnsTitle;
   final String dnsHint;
+  final String allowInsecureTitle;
+  final String allowInsecureDesc;
+  final String tfoTitle;
+  final String tfoDesc;
   final String routing;
   final String routingFull;
   final String routingRussia;
@@ -108,6 +112,10 @@ class L10n {
     required this.warpDesc,
     required this.dnsTitle,
     required this.dnsHint,
+    required this.allowInsecureTitle,
+    required this.allowInsecureDesc,
+    required this.tfoTitle,
+    required this.tfoDesc,
     required this.routing,
     required this.routingFull,
     required this.routingRussia,
@@ -199,6 +207,10 @@ class L10n {
     warpDesc: 'Connect via WARP (CDN tab)',
     dnsTitle: 'Custom DNS',
     dnsHint: 'e.g. 1.1.1.1 (default 8.8.8.8)',
+    allowInsecureTitle: 'Allow insecure',
+    allowInsecureDesc: 'Accept untrusted TLS certificates',
+    tfoTitle: 'TCP Fast Open',
+    tfoDesc: 'Speeds up connection setup. Not all servers support it',
     routing: 'Routing',
     routingFull: 'Full VPN',
     routingRussia: 'Russia bypass',
@@ -282,6 +294,10 @@ class L10n {
     warpDesc: 'Подключиться через WARP (вкладка CDN)',
     dnsTitle: 'Свой DNS',
     dnsHint: 'напр. 1.1.1.1 (по умолчанию 8.8.8.8)',
+    allowInsecureTitle: 'Разрешить недоверенные',
+    allowInsecureDesc: 'Принимать недоверенные TLS-сертификаты',
+    tfoTitle: 'TCP Fast Open',
+    tfoDesc: 'Ускоряет установку соединения. Поддерживают не все серверы',
     killSwitch: 'Kill Switch',
     killSwitchDesc: 'Блокировать трафик при разрыве VPN',
     routing: 'Маршрутизация',

@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import '../models/profile.dart';
 
 enum RoutingMode { fullVpn, russiaBypass, custom }
@@ -20,14 +19,18 @@ class ConfigBuilder {
     List<String> ruCidrs = const [],
     bool mux = false,
     String dns = '8.8.8.8',
+    bool allowInsecure = false,
+    bool tfo = false,
   }) {
     final dnsAddr = dns.trim().isEmpty ? '8.8.8.8' : dns.trim();
     final Map<String, dynamic> outbound = switch (profile.protocol) {
       // dns-direct: резолв адреса сервера напрямую, без петли через proxy
-      VpnProtocol.vless => _singboxVless(profile.config)
+      VpnProtocol.vless => _singboxVless(profile.config,
+          allowInsecure: allowInsecure, tfo: tfo)
         ..['domain_resolver'] = {'server': 'dns-direct', 'strategy': 'prefer_ipv4'},
-      VpnProtocol.tuic => _tuic(profile.config),
-      VpnProtocol.hysteria2 => _hysteria2(profile.config),
+      VpnProtocol.tuic => _tuic(profile.config, allowInsecure: allowInsecure),
+      VpnProtocol.hysteria2 =>
+        _hysteria2(profile.config, allowInsecure: allowInsecure),
       _ => throw ArgumentError('build: unsupported protocol ${profile.protocol}'),
     };
     if (mux) outbound['multiplex'] = _singboxMux();
@@ -182,6 +185,8 @@ class ConfigBuilder {
     String fragPackets = 'tlshello',
     String fragLength = '100-200',
     String fragInterval = '10-20',
+    bool allowInsecure = false,
+    bool tfo = false,
   }) {
     final c = profile.config;
     final transport = (c['transport'] as String? ?? 'tcp').trim();
@@ -191,7 +196,7 @@ class ConfigBuilder {
     // MUX несовместим с xtls-rprx-vision flow
     final muxOk = mux && flow.isEmpty;
 
-    final stream = _xrayStream(c);
+    final stream = _xrayStream(c, allowInsecure: allowInsecure, tfo: tfo);
     // фрагментация: проксируем диалер через fragment-outbound
     if (fragment) {
       final sockopt = (stream['sockopt'] as Map<String, dynamic>?) ?? {};
@@ -267,14 +272,18 @@ class ConfigBuilder {
     List<String> ruCidrs = const [],
     bool mux = false,
     String dns = '8.8.8.8',
+    bool allowInsecure = false,
+    bool tfo = false,
   }) {
     final dnsAddr = dns.trim().isEmpty ? '8.8.8.8' : dns.trim();
     final outbound = switch (profile.protocol) {
       // dns-direct — bootstrap DNS для резолва хоста сервера без循环
-      VpnProtocol.vless => _singboxVless(profile.config)
+      VpnProtocol.vless => _singboxVless(profile.config,
+          allowInsecure: allowInsecure, tfo: tfo)
         ..['domain_resolver'] = {'server': 'dns-direct', 'strategy': 'prefer_ipv4'},
-      VpnProtocol.tuic => _tuic(profile.config),
-      VpnProtocol.hysteria2 => _hysteria2(profile.config),
+      VpnProtocol.tuic => _tuic(profile.config, allowInsecure: allowInsecure),
+      VpnProtocol.hysteria2 =>
+        _hysteria2(profile.config, allowInsecure: allowInsecure),
       _ => throw ArgumentError(
           'buildSingboxProxy: unsupported protocol ${profile.protocol}'),
     };
@@ -392,11 +401,18 @@ class ConfigBuilder {
   static String toJson(Map<String, dynamic> config) =>
       const JsonEncoder.withIndent('  ').convert(config);
 
-  static Map<String, dynamic> _xrayStream(Map<String, dynamic> c) {
+  static Map<String, dynamic> _xrayStream(
+    Map<String, dynamic> c, {
+    bool allowInsecure = false,
+    bool tfo = false,
+  }) {
     final transport = c['transport'] as String? ?? 'tcp';
     final security = c['security'] as String? ?? 'none';
 
     final s = <String, dynamic>{};
+    if (tfo) {
+      s['sockopt'] = {'tcpFastOpen': true};
+    }
 
     s['network'] = switch (transport) {
       'grpc' => 'grpc',
@@ -419,6 +435,7 @@ class ConfigBuilder {
       s['tlsSettings'] = {
         'serverName': c['sni'],
         'fingerprint': c['fp'] ?? 'chrome',
+        'allowInsecure': c['insecure'] == true || allowInsecure,
       };
     }
 
@@ -484,11 +501,16 @@ class ConfigBuilder {
         'max_streams': 8,
       };
 
-  static Map<String, dynamic> _singboxVless(Map<String, dynamic> c) {
+  static Map<String, dynamic> _singboxVless(
+    Map<String, dynamic> c, {
+    bool allowInsecure = false,
+    bool tfo = false,
+  }) {
     final transport = c['transport'] as String? ?? 'tcp';
     final security = c['security'] as String? ?? 'none';
     final rawFlow = (c['flow'] as String? ?? '').trim();
     final flow = (transport == 'grpc') ? '' : rawFlow;
+    final insecure = c['insecure'] == true || allowInsecure;
 
     final out = <String, dynamic>{
       'type': 'vless',
@@ -496,6 +518,7 @@ class ConfigBuilder {
       'server': c['server'],
       'server_port': c['port'],
       'uuid': c['uuid'],
+      if (tfo) 'tcp_fast_open': true,
     };
 
     if (flow.isNotEmpty) out['flow'] = flow;
@@ -511,6 +534,7 @@ class ConfigBuilder {
       out['tls'] = {
         'enabled': true,
         'server_name': c['sni'],
+        'insecure': insecure,
         'utls': {'enabled': true, 'fingerprint': c['fp'] ?? 'chrome'},
       };
     }
@@ -545,7 +569,11 @@ class ConfigBuilder {
     return out;
   }
 
-  static Map<String, dynamic> _tuic(Map<String, dynamic> c) => {
+  static Map<String, dynamic> _tuic(
+    Map<String, dynamic> c, {
+    bool allowInsecure = false,
+  }) =>
+      {
         'type': 'tuic',
         'tag': 'proxy',
         'server': c['server'],
@@ -557,13 +585,16 @@ class ConfigBuilder {
           'enabled': true,
           'server_name': c['sni'],
           'alpn': [(c['alpn'] as String?) ?? 'h3'],
-          'insecure': c['insecure'] ?? false,
+          'insecure': c['insecure'] == true || allowInsecure,
         },
         // адрес сервера резолвим НАПРЯМУЮ (иначе петля: резолв через сам прокси)
         'domain_resolver': {'server': 'dns-direct', 'strategy': 'prefer_ipv4'},
       };
 
-  static Map<String, dynamic> _hysteria2(Map<String, dynamic> c) {
+  static Map<String, dynamic> _hysteria2(
+    Map<String, dynamic> c, {
+    bool allowInsecure = false,
+  }) {
     final out = <String, dynamic>{
       'type': 'hysteria2',
       'tag': 'proxy',
@@ -573,7 +604,7 @@ class ConfigBuilder {
       'tls': {
         'enabled': true,
         'server_name': c['sni'],
-        'insecure': c['insecure'] ?? false,
+        'insecure': c['insecure'] == true || allowInsecure,
       },
     };
     final obfs = c['obfs'] as String? ?? '';
