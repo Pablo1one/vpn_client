@@ -612,7 +612,7 @@ class _AppPickerSheetState extends State<_AppPickerSheet> {
 
 // ── Update tile ───────────────────────────────────────────────────────────────
 
-enum _UpdateState { idle, checking, upToDate, available }
+enum _UpdateState { idle, checking, upToDate, available, error }
 
 class _UpdateTile extends StatefulWidget {
   const _UpdateTile();
@@ -637,12 +637,17 @@ class _UpdateTileState extends State<_UpdateTile> {
 
   Future<void> _check() async {
     setState(() => _state = _UpdateState.checking);
-    final info = await _svc.check();
-    if (!mounted) return;
-    setState(() {
-      _info = info;
-      _state = info != null ? _UpdateState.available : _UpdateState.upToDate;
-    });
+    try {
+      final info = await _svc.check();
+      if (!mounted) return;
+      setState(() {
+        _info = info;
+        _state = info != null ? _UpdateState.available : _UpdateState.upToDate;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _state = _UpdateState.error);
+    }
   }
 
   @override
@@ -652,6 +657,7 @@ class _UpdateTileState extends State<_UpdateTile> {
     final sub = switch (_state) {
       _UpdateState.checking => s.checkingForUpdates,
       _UpdateState.upToDate => s.upToDate,
+      _UpdateState.error => s.updateCheckFailed,
       _UpdateState.available => '${s.updateAvailable}: v${_info!.version}',
       _UpdateState.idle =>
         _currentVersion.isNotEmpty ? '${s.version} $_currentVersion' : '',

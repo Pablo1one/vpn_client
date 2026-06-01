@@ -48,6 +48,7 @@ class L10n {
   final String checkingForUpdates;
   final String upToDate;
   final String updateAvailable;
+  final String updateCheckFailed;
   final String download;
   final String logs;
   final String logsTitle;
@@ -119,6 +120,7 @@ class L10n {
     required this.checkingForUpdates,
     required this.upToDate,
     required this.updateAvailable,
+    required this.updateCheckFailed,
     required this.download,
     required this.logs,
     required this.logsTitle,
@@ -199,6 +201,7 @@ class L10n {
     checkingForUpdates: 'Checking…',
     upToDate: 'Up to date',
     updateAvailable: 'Update available',
+    updateCheckFailed: 'Check failed',
     download: 'Download',
     logs: 'Logs',
     logsTitle: 'Logs',
@@ -272,6 +275,7 @@ class L10n {
     checkingForUpdates: 'Проверка…',
     upToDate: 'Установлена последняя версия',
     updateAvailable: 'Доступно обновление',
+    updateCheckFailed: 'Не удалось проверить',
     download: 'Скачать',
     logs: 'Логи',
     logsTitle: 'Логи',
