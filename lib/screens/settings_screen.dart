@@ -7,6 +7,7 @@ import '../providers/vpn_provider.dart';
 import '../providers/language_provider.dart';
 import '../providers/theme_provider.dart';
 import '../services/update_service.dart';
+import '../services/engine_versions_service.dart';
 import '../utils/config_builder.dart';
 import '../l10n/strings.dart';
 import '../theme.dart';
@@ -113,6 +114,11 @@ class SettingsScreen extends StatelessWidget {
           // ── Updates ──────────────────────────────────────────────────────
           _SectionHeader(s.updates),
           const _UpdateTile(),
+          const Divider(height: 1),
+
+          // ── Cores & versions ─────────────────────────────────────────────
+          _SectionHeader(s.coresTitle),
+          const _CoresTile(),
           const Divider(height: 1),
 
           // ── Logs ─────────────────────────────────────────────────────────
@@ -783,6 +789,68 @@ class _AppPickerSheetState extends State<_AppPickerSheet> {
                     },
                   ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Cores & versions tile ──────────────────────────────────────────────────────
+
+class _CoresTile extends StatefulWidget {
+  const _CoresTile();
+
+  @override
+  State<_CoresTile> createState() => _CoresTileState();
+}
+
+class _CoresTileState extends State<_CoresTile> {
+  EngineVersions? _v;
+
+  @override
+  void initState() {
+    super.initState();
+    EngineVersionService().load().then((v) {
+      if (mounted) setState(() => _v = v);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ac;
+    final v = _v;
+    final rows = <(String, String)>[
+      ('LightningMcQueen', v?.app ?? '…'),
+      ('Xray-core', v?.xray ?? '…'),
+      ('sing-box', v?.singbox ?? '…'),
+      ('AmneziaWG', v?.amneziawg ?? '…'),
+      ('WinTun', v?.wintun ?? '…'),
+    ];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+      child: Column(
+        children: [
+          for (final (name, ver) in rows)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(name,
+                        style: TextStyle(fontSize: 13, color: c.textSecondary)),
+                  ),
+                  Text(
+                    ver,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: c.textPrimary,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
