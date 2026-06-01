@@ -11,6 +11,7 @@ import '../utils/config_builder.dart';
 import '../l10n/strings.dart';
 import '../theme.dart';
 import 'logs_screen.dart';
+import 'cdn_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -43,6 +44,39 @@ class SettingsScreen extends StatelessWidget {
             const SizedBox(height: 4),
             _BypassDomainsTile(vpn: vpn, s: s),
           ],
+          const Divider(height: 1),
+
+          // ── Advanced (MUX / fragmentation) ───────────────────────────────
+          _SectionHeader(s.advanced),
+          SwitchListTile(
+            title: Text(s.fragmentTitle),
+            subtitle: Text(s.fragmentDesc),
+            value: vpn.fragment,
+            onChanged: vpn.isConnected ? null : vpn.setFragment,
+          ),
+          if (vpn.fragment) _FragmentParamsTile(vpn: vpn, s: s),
+          SwitchListTile(
+            title: Text(s.muxTitle),
+            subtitle: Text(s.muxDesc),
+            value: vpn.mux,
+            onChanged: vpn.isConnected ? null : vpn.setMux,
+          ),
+          const Divider(height: 1),
+
+          // ── WARP ─────────────────────────────────────────────────────────
+          _SectionHeader(s.warpTitle),
+          ListTile(
+            leading: Icon(Icons.cloud_outlined,
+                size: 20, color: context.ac.textMuted),
+            title: Text(s.warpTitle),
+            subtitle: Text(s.warpDesc),
+            trailing: Icon(Icons.chevron_right,
+                size: 20, color: context.ac.textMuted),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const CdnScreen()),
+            ),
+          ),
           const Divider(height: 1),
 
           // ── Per-app (Android only) ───────────────────────────────────────
@@ -111,6 +145,97 @@ class SettingsScreen extends StatelessWidget {
       ),
     );
     if (result != null) vpn.setExcludedApps(result);
+  }
+}
+
+// ── Параметры TLS-фрагментации (показываются при включённой фрагментации) ─────
+
+class _FragmentParamsTile extends StatefulWidget {
+  final VpnProvider vpn;
+  final L10n s;
+  const _FragmentParamsTile({required this.vpn, required this.s});
+
+  @override
+  State<_FragmentParamsTile> createState() => _FragmentParamsTileState();
+}
+
+class _FragmentParamsTileState extends State<_FragmentParamsTile> {
+  late RangeValues _len;
+  late RangeValues _intv;
+  late String _packets;
+
+  @override
+  void initState() {
+    super.initState();
+    _len = RangeValues(
+        widget.vpn.fragLenMin.toDouble(), widget.vpn.fragLenMax.toDouble());
+    _intv = RangeValues(
+        widget.vpn.fragIntMin.toDouble(), widget.vpn.fragIntMax.toDouble());
+    _packets = widget.vpn.fragPackets;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ac;
+    final disabled = widget.vpn.isConnected;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text('packets', style: TextStyle(fontSize: 12, color: c.textSecondary)),
+              const SizedBox(width: 12),
+              DropdownButton<String>(
+                value: _packets,
+                isDense: true,
+                items: const [
+                  DropdownMenuItem(value: 'tlshello', child: Text('tlshello')),
+                  DropdownMenuItem(value: '1-3', child: Text('1-3')),
+                  DropdownMenuItem(value: '1-2', child: Text('1-2')),
+                ],
+                onChanged: disabled
+                    ? null
+                    : (v) {
+                        if (v == null) return;
+                        setState(() => _packets = v);
+                        widget.vpn.setFragParams(packets: v);
+                      },
+              ),
+            ],
+          ),
+          Text('length: ${_len.start.round()}-${_len.end.round()}',
+              style: TextStyle(fontSize: 12, color: c.textSecondary)),
+          RangeSlider(
+            values: _len,
+            min: 0,
+            max: 300,
+            divisions: 60,
+            labels: RangeLabels('${_len.start.round()}', '${_len.end.round()}'),
+            onChanged: disabled ? null : (v) => setState(() => _len = v),
+            onChangeEnd: disabled
+                ? null
+                : (v) => widget.vpn.setFragParams(
+                    lenMin: v.start.round(), lenMax: v.end.round()),
+          ),
+          Text('interval: ${_intv.start.round()}-${_intv.end.round()}',
+              style: TextStyle(fontSize: 12, color: c.textSecondary)),
+          RangeSlider(
+            values: _intv,
+            min: 0,
+            max: 50,
+            divisions: 50,
+            labels: RangeLabels('${_intv.start.round()}', '${_intv.end.round()}'),
+            onChanged: disabled ? null : (v) => setState(() => _intv = v),
+            onChangeEnd: disabled
+                ? null
+                : (v) => widget.vpn.setFragParams(
+                    intMin: v.start.round(), intMax: v.end.round()),
+          ),
+        ],
+      ),
+    );
   }
 }
 

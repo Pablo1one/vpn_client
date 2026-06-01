@@ -25,6 +25,12 @@ class VpnProvider extends ChangeNotifier {
   RoutingMode _routingMode = RoutingMode.fullVpn;
   List<String> _bypassDomains = [];
   List<String> _excludedApps = [];
+  bool _mux = false;        // мультиплексирование
+  bool _fragment = false;   // TLS-фрагментация (обход DPI)
+  // параметры фрагментации (дефолты — текущие зашитые значения)
+  String _fragPackets = 'tlshello';
+  int _fragLenMin = 100, _fragLenMax = 200;
+  int _fragIntMin = 10, _fragIntMax = 20;
   String? _error;
 
   bool _warpActive = false;
@@ -49,6 +55,13 @@ class VpnProvider extends ChangeNotifier {
   RoutingMode get routingMode => _routingMode;
   List<String> get bypassDomains => List.from(_bypassDomains);
   List<String> get excludedApps => List.from(_excludedApps);
+  bool get mux => _mux;
+  bool get fragment => _fragment;
+  String get fragPackets => _fragPackets;
+  int get fragLenMin => _fragLenMin;
+  int get fragLenMax => _fragLenMax;
+  int get fragIntMin => _fragIntMin;
+  int get fragIntMax => _fragIntMax;
   String? get error => _error;
   DateTime? get connectedAt => _connectedAt;
   bool get isConnected => _status == VpnStatus.connected;
@@ -95,6 +108,13 @@ class VpnProvider extends ChangeNotifier {
     _killSwitch = prefs.getBool('killSwitch') ?? false;
     _bypassDomains = prefs.getStringList('bypassDomains') ?? [];
     _excludedApps = prefs.getStringList('excludedApps') ?? [];
+    _mux = prefs.getBool('mux') ?? false;
+    _fragment = prefs.getBool('fragment') ?? false;
+    _fragPackets = prefs.getString('fragPackets') ?? 'tlshello';
+    _fragLenMin = prefs.getInt('fragLenMin') ?? 100;
+    _fragLenMax = prefs.getInt('fragLenMax') ?? 200;
+    _fragIntMin = prefs.getInt('fragIntMin') ?? 10;
+    _fragIntMax = prefs.getInt('fragIntMax') ?? 20;
     _routingMode = RoutingMode.values.firstWhere(
       (m) => m.name == (prefs.getString('routingMode') ?? 'fullVpn'),
       orElse: () => RoutingMode.fullVpn,
@@ -146,6 +166,7 @@ class VpnProvider extends ChangeNotifier {
             killSwitch: _killSwitch,
             bypassDomains: _bypassDomains,
             ruCidrs: ruCidrs,
+            mux: _mux,
           );
           await _vpn.connect(ConfigBuilder.toJson(config));
         } else {
@@ -154,6 +175,11 @@ class VpnProvider extends ChangeNotifier {
             profile,
             routingMode: _routingMode,
             ruCidrs: ruCidrs,
+            mux: _mux,
+            fragment: _fragment,
+            fragPackets: _fragPackets,
+            fragLength: '$_fragLenMin-$_fragLenMax',
+            fragInterval: '$_fragIntMin-$_fragIntMax',
           );
           final tunConfig = ConfigBuilder.buildTun(
             killSwitch: _killSwitch,
@@ -175,6 +201,7 @@ class VpnProvider extends ChangeNotifier {
           profile,
           routingMode: _routingMode,
           ruCidrs: ruCidrs,
+          mux: _mux,
         );
         final tunConfig = ConfigBuilder.buildTun(
           killSwitch: _killSwitch,
@@ -466,6 +493,41 @@ class VpnProvider extends ChangeNotifier {
     _excludedApps = apps;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList('excludedApps', apps);
+    notifyListeners();
+  }
+
+  Future<void> setMux(bool value) async {
+    _mux = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('mux', value);
+    notifyListeners();
+  }
+
+  Future<void> setFragment(bool value) async {
+    _fragment = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('fragment', value);
+    notifyListeners();
+  }
+
+  Future<void> setFragParams({
+    String? packets,
+    int? lenMin,
+    int? lenMax,
+    int? intMin,
+    int? intMax,
+  }) async {
+    if (packets != null) _fragPackets = packets;
+    if (lenMin != null) _fragLenMin = lenMin;
+    if (lenMax != null) _fragLenMax = lenMax;
+    if (intMin != null) _fragIntMin = intMin;
+    if (intMax != null) _fragIntMax = intMax;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('fragPackets', _fragPackets);
+    await prefs.setInt('fragLenMin', _fragLenMin);
+    await prefs.setInt('fragLenMax', _fragLenMax);
+    await prefs.setInt('fragIntMin', _fragIntMin);
+    await prefs.setInt('fragIntMax', _fragIntMax);
     notifyListeners();
   }
 
