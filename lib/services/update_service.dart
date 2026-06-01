@@ -19,40 +19,37 @@ class UpdateService {
     return info.version;
   }
 
-  /// Returns [UpdateInfo] if a newer version is available, null otherwise.
+  /// Returns [UpdateInfo] if a newer version is available, null if up to date.
+  /// Бросает исключение при сбое проверки (нет сети, приватный репо, нет релизов → 404).
   Future<UpdateInfo?> check() async {
-    try {
-      final current = await currentVersion();
-      final resp = await http.get(
-        Uri.parse(_apiUrl),
-        headers: {'Accept': 'application/vnd.github.v3+json'},
-      ).timeout(const Duration(seconds: 10));
+    final current = await currentVersion();
+    final resp = await http.get(
+      Uri.parse(_apiUrl),
+      headers: {'Accept': 'application/vnd.github.v3+json'},
+    ).timeout(const Duration(seconds: 10));
 
-      if (resp.statusCode != 200) return null;
-
-      final json = jsonDecode(resp.body) as Map<String, dynamic>;
-      final latest =
-          (json['tag_name'] as String).replaceAll(RegExp(r'^v'), '');
-
-      if (!_isNewer(latest, current)) return null;
-
-      final assets = (json['assets'] as List<dynamic>)
-          .cast<Map<String, dynamic>>();
-      final asset = assets.firstWhere(
-        (a) => Platform.isWindows
-            ? (a['name'] as String).endsWith('.exe')
-            : (a['name'] as String).endsWith('.apk'),
-        orElse: () => {},
-      );
-
-      return UpdateInfo(
-        version: latest,
-        downloadUrl:
-            (asset['browser_download_url'] as String?) ?? releasesUrl,
-      );
-    } catch (_) {
-      return null;
+    if (resp.statusCode != 200) {
+      throw Exception('GitHub API: HTTP ${resp.statusCode}');
     }
+
+    final json = jsonDecode(resp.body) as Map<String, dynamic>;
+    final latest = (json['tag_name'] as String).replaceAll(RegExp(r'^v'), '');
+
+    if (!_isNewer(latest, current)) return null;
+
+    final assets =
+        (json['assets'] as List<dynamic>).cast<Map<String, dynamic>>();
+    final asset = assets.firstWhere(
+      (a) => Platform.isWindows
+          ? (a['name'] as String).endsWith('.exe')
+          : (a['name'] as String).endsWith('.apk'),
+      orElse: () => {},
+    );
+
+    return UpdateInfo(
+      version: latest,
+      downloadUrl: (asset['browser_download_url'] as String?) ?? releasesUrl,
+    );
   }
 
   static bool _isNewer(String a, String b) {
