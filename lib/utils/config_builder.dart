@@ -19,7 +19,9 @@ class ConfigBuilder {
     List<String> bypassDomains = const [],
     List<String> ruCidrs = const [],
     bool mux = false,
+    String dns = '8.8.8.8',
   }) {
+    final dnsAddr = dns.trim().isEmpty ? '8.8.8.8' : dns.trim();
     final Map<String, dynamic> outbound = switch (profile.protocol) {
       // dns-direct: резолв адреса сервера напрямую, без петли через proxy
       VpnProtocol.vless => _singboxVless(profile.config)
@@ -51,10 +53,16 @@ class ConfigBuilder {
 
     return {
       'log': {'level': 'info'},
+      'experimental': {
+        'clash_api': {
+          'external_controller': '127.0.0.1:9090',
+          'secret': '',
+        },
+      },
       'dns': {
         'servers': [
           {
-            'address': '8.8.8.8',
+            'address': dnsAddr,
             'detour': routingMode == RoutingMode.fullVpn ? 'proxy' : 'direct',
             'tag': 'dns',
           },
@@ -99,7 +107,10 @@ class ConfigBuilder {
   static Map<String, dynamic> buildTun({
     bool killSwitch = false,
     RoutingMode routingMode = RoutingMode.fullVpn,
-  }) => {
+    String dns = '8.8.8.8',
+  }) {
+    final dnsAddr = dns.trim().isEmpty ? '8.8.8.8' : dns.trim();
+    return {
         'log': {'level': 'info'},
         'experimental': {
           'clash_api': {
@@ -110,7 +121,7 @@ class ConfigBuilder {
         'dns': {
           'servers': [
             {
-              'address': '8.8.8.8',
+              'address': dnsAddr,
               'detour': routingMode == RoutingMode.fullVpn ? 'proxy' : 'direct',
               'tag': 'dns',
             },
@@ -159,6 +170,7 @@ class ConfigBuilder {
           ],
         },
       };
+  }
 
   // xray конфиг для vless — socks5 на 10808 с ip маршрутизацией
   static String buildXrayVless(
@@ -254,7 +266,9 @@ class ConfigBuilder {
     RoutingMode routingMode = RoutingMode.fullVpn,
     List<String> ruCidrs = const [],
     bool mux = false,
+    String dns = '8.8.8.8',
   }) {
+    final dnsAddr = dns.trim().isEmpty ? '8.8.8.8' : dns.trim();
     final outbound = switch (profile.protocol) {
       // dns-direct — bootstrap DNS для резолва хоста сервера без循环
       VpnProtocol.vless => _singboxVless(profile.config)
@@ -289,7 +303,7 @@ class ConfigBuilder {
       'dns': {
         'servers': [
           {
-            'address': '8.8.8.8',
+            'address': dnsAddr,
             'detour': routingMode == RoutingMode.fullVpn ? 'proxy' : 'direct',
             'tag': 'dns',
           },
@@ -320,6 +334,7 @@ class ConfigBuilder {
       'route': {
         'rules': rules,
         'final': 'proxy',
+        'default_domain_resolver': {'server': 'dns-direct', 'strategy': 'prefer_ipv4'},
       },
     };
   }
@@ -544,7 +559,8 @@ class ConfigBuilder {
           'alpn': [(c['alpn'] as String?) ?? 'h3'],
           'insecure': c['insecure'] ?? false,
         },
-        'domain_resolver': {'server': 'dns', 'strategy': 'prefer_ipv4'},
+        // адрес сервера резолвим НАПРЯМУЮ (иначе петля: резолв через сам прокси)
+        'domain_resolver': {'server': 'dns-direct', 'strategy': 'prefer_ipv4'},
       };
 
   static Map<String, dynamic> _hysteria2(Map<String, dynamic> c) {
@@ -564,7 +580,8 @@ class ConfigBuilder {
     if (obfs.isNotEmpty) {
       out['obfs'] = {'type': obfs, 'password': c['obfsPassword'] ?? ''};
     }
-    out['domain_resolver'] = {'server': 'dns', 'strategy': 'prefer_ipv4'};
+    // адрес сервера резолвим НАПРЯМУЮ (иначе петля через сам прокси)
+    out['domain_resolver'] = {'server': 'dns-direct', 'strategy': 'prefer_ipv4'};
     return out;
   }
 }

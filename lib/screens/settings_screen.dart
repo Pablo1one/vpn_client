@@ -61,6 +61,7 @@ class SettingsScreen extends StatelessWidget {
             value: vpn.mux,
             onChanged: vpn.isConnected ? null : vpn.setMux,
           ),
+          _DnsTile(vpn: vpn, s: s),
           const Divider(height: 1),
 
           // ── WARP ─────────────────────────────────────────────────────────
@@ -145,6 +146,51 @@ class SettingsScreen extends StatelessWidget {
       ),
     );
     if (result != null) vpn.setExcludedApps(result);
+  }
+}
+
+// ── Кастомный DNS ─────────────────────────────────────────────────────────────
+
+class _DnsTile extends StatefulWidget {
+  final VpnProvider vpn;
+  final L10n s;
+  const _DnsTile({required this.vpn, required this.s});
+
+  @override
+  State<_DnsTile> createState() => _DnsTileState();
+}
+
+class _DnsTileState extends State<_DnsTile> {
+  late final TextEditingController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController(text: widget.vpn.dns);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      child: TextField(
+        controller: _ctrl,
+        enabled: !widget.vpn.isConnected,
+        decoration: InputDecoration(
+          labelText: widget.s.dnsTitle,
+          hintText: widget.s.dnsHint,
+          isDense: true,
+          prefixIcon: const Icon(Icons.dns_outlined, size: 18),
+        ),
+        onChanged: (v) => widget.vpn.setDns(v),
+      ),
+    );
   }
 }
 

@@ -24,7 +24,6 @@ class SpeedService {
 
   // AWG mode state
   String? _awgInterface;
-  String? _awgHost;
   int? _prevRx;
   int? _prevTx;
   DateTime? _prevSample;
@@ -44,11 +43,10 @@ class SpeedService {
 
   // ── AWG mode (interface byte counters + ICMP ping) ────────────────────────
 
-  void startAwg({required String interfaceName, required String serverHost}) {
+  void startAwg({required String interfaceName, String serverHost = ''}) {
     if (_active) return;
     _active = true;
     _awgInterface = interfaceName;
-    _awgHost = serverHost;
     _prevRx = null;
     _prevTx = null;
     _prevSample = null;
@@ -67,7 +65,6 @@ class SpeedService {
     _awgPollTimer = null;
     _pingMs = -1;
     _awgInterface = null;
-    _awgHost = null;
     _prevRx = null;
     _prevTx = null;
     _prevSample = null;
@@ -113,10 +110,12 @@ class SpeedService {
   }
 
   Future<void> _updateAwgPing() async {
-    if (!_active || _awgHost == null) return;
+    if (!_active) return;
     try {
+      // Пингуем публичный хост ЧЕРЕЗ туннель (сам VPN-сервер часто блокирует ICMP).
+      // Это измеряет реальную задержку пути и совпадает по смыслу с пингом др. протоколов.
       final result = await Process.run(
-        'ping', ['-n', '1', '-w', '3000', _awgHost!],
+        'ping', ['-n', '1', '-w', '3000', '1.1.1.1'],
         runInShell: false,
       );
       final out = (result.stdout as String).toLowerCase();
