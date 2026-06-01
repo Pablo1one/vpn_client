@@ -27,16 +27,6 @@ class SettingsScreen extends StatelessWidget {
       appBar: AppBar(title: Text(s.settingsTab)),
       body: ListView(
         children: [
-          // ── Connection ──────────────────────────────────────────────────
-          _SectionHeader(s.connection),
-          SwitchListTile(
-            title: Text(s.killSwitch),
-            subtitle: Text(s.killSwitchDesc),
-            value: vpn.killSwitch,
-            onChanged: vpn.setKillSwitch,
-          ),
-          const Divider(height: 1),
-
           // ── Routing ─────────────────────────────────────────────────────
           _SectionHeader(s.routing),
           _RoutingModeSelector(vpn: vpn, s: s),
@@ -46,7 +36,7 @@ class SettingsScreen extends StatelessWidget {
           ],
           const Divider(height: 1),
 
-          // ── Advanced (MUX / fragmentation) ───────────────────────────────
+          // ── Advanced (MUX / fragmentation / TLS) ─────────────────────────
           _SectionHeader(s.advanced),
           SwitchListTile(
             title: Text(s.fragmentTitle),
@@ -60,6 +50,24 @@ class SettingsScreen extends StatelessWidget {
             subtitle: Text(s.muxDesc),
             value: vpn.mux,
             onChanged: vpn.isConnected ? null : vpn.setMux,
+          ),
+          SwitchListTile(
+            title: Text(s.allowInsecureTitle),
+            subtitle: Text(s.allowInsecureDesc),
+            value: vpn.allowInsecure,
+            onChanged: vpn.isConnected ? null : vpn.setAllowInsecure,
+          ),
+          SwitchListTile(
+            title: Text(s.tfoTitle),
+            subtitle: Text(s.tfoDesc),
+            value: vpn.tfo,
+            onChanged: vpn.isConnected ? null : vpn.setTfo,
+          ),
+          SwitchListTile(
+            title: Text(s.killSwitch),
+            subtitle: Text(s.killSwitchDesc),
+            value: vpn.killSwitch,
+            onChanged: vpn.isConnected ? null : vpn.setKillSwitch,
           ),
           _DnsTile(vpn: vpn, s: s),
           const Divider(height: 1),

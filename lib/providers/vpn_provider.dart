@@ -32,6 +32,8 @@ class VpnProvider extends ChangeNotifier {
   int _fragLenMin = 100, _fragLenMax = 200;
   int _fragIntMin = 10, _fragIntMax = 20;
   String _dns = '';         // кастомный DNS (пусто = дефолт 8.8.8.8)
+  bool _allowInsecure = false; // принимать недоверенные TLS-сертификаты
+  bool _tfo = false;           // TCP Fast Open
   String? _error;
 
   bool _warpActive = false;
@@ -65,6 +67,8 @@ class VpnProvider extends ChangeNotifier {
   int get fragIntMin => _fragIntMin;
   int get fragIntMax => _fragIntMax;
   String get dns => _dns;
+  bool get allowInsecure => _allowInsecure;
+  bool get tfo => _tfo;
   String? get error => _error;
   DateTime? get connectedAt => _connectedAt;
   bool get isConnected => _status == VpnStatus.connected;
@@ -119,6 +123,8 @@ class VpnProvider extends ChangeNotifier {
     _fragIntMin = prefs.getInt('fragIntMin') ?? 10;
     _fragIntMax = prefs.getInt('fragIntMax') ?? 20;
     _dns = prefs.getString('dns') ?? '';
+    _allowInsecure = prefs.getBool('allowInsecure') ?? false;
+    _tfo = prefs.getBool('tfo') ?? false;
     _routingMode = RoutingMode.values.firstWhere(
       (m) => m.name == (prefs.getString('routingMode') ?? 'fullVpn'),
       orElse: () => RoutingMode.fullVpn,
@@ -173,6 +179,8 @@ class VpnProvider extends ChangeNotifier {
             ruCidrs: ruCidrs,
             mux: _mux,
             dns: _dns,
+            allowInsecure: _allowInsecure,
+            tfo: _tfo,
           );
           await _vpn.connect(ConfigBuilder.toJson(config));
         } else {
@@ -186,6 +194,8 @@ class VpnProvider extends ChangeNotifier {
             fragPackets: _fragPackets,
             fragLength: '$_fragLenMin-$_fragLenMax',
             fragInterval: '$_fragIntMin-$_fragIntMax',
+            allowInsecure: _allowInsecure,
+            tfo: _tfo,
           );
           final tunConfig = ConfigBuilder.buildTun(
             killSwitch: _killSwitch,
@@ -210,6 +220,8 @@ class VpnProvider extends ChangeNotifier {
           ruCidrs: ruCidrs,
           mux: _mux,
           dns: _dns,
+          allowInsecure: _allowInsecure,
+          tfo: _tfo,
         );
         final tunConfig = ConfigBuilder.buildTun(
           killSwitch: _killSwitch,
@@ -229,6 +241,8 @@ class VpnProvider extends ChangeNotifier {
           bypassDomains: _bypassDomains,
           mux: _mux,
           dns: _dns,
+          allowInsecure: _allowInsecure,
+          tfo: _tfo,
         );
         await _vpn.connect(
           ConfigBuilder.toJson(config),
@@ -544,6 +558,20 @@ class VpnProvider extends ChangeNotifier {
     _dns = value.trim();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('dns', _dns);
+    notifyListeners();
+  }
+
+  Future<void> setAllowInsecure(bool value) async {
+    _allowInsecure = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('allowInsecure', value);
+    notifyListeners();
+  }
+
+  Future<void> setTfo(bool value) async {
+    _tfo = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('tfo', value);
     notifyListeners();
   }
 
