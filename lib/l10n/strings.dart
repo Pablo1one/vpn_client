@@ -23,6 +23,8 @@ class L10n {
   final String fragmentDesc;
   final String warpTitle;
   final String warpDesc;
+  final String dnsTitle;
+  final String dnsHint;
   final String routing;
   final String routingFull;
   final String routingRussia;
@@ -104,6 +106,8 @@ class L10n {
     required this.fragmentDesc,
     required this.warpTitle,
     required this.warpDesc,
+    required this.dnsTitle,
+    required this.dnsHint,
     required this.routing,
     required this.routingFull,
     required this.routingRussia,
@@ -193,6 +197,8 @@ class L10n {
     fragmentDesc: 'Split TLS handshake to bypass DPI',
     warpTitle: 'Cloudflare WARP',
     warpDesc: 'Connect via WARP (CDN tab)',
+    dnsTitle: 'Custom DNS',
+    dnsHint: 'e.g. 1.1.1.1 (default 8.8.8.8)',
     routing: 'Routing',
     routingFull: 'Full VPN',
     routingRussia: 'Russia bypass',
@@ -274,6 +280,8 @@ class L10n {
     fragmentDesc: 'Дробит TLS-хендшейк для обхода DPI',
     warpTitle: 'Cloudflare WARP',
     warpDesc: 'Подключиться через WARP (вкладка CDN)',
+    dnsTitle: 'Свой DNS',
+    dnsHint: 'напр. 1.1.1.1 (по умолчанию 8.8.8.8)',
     killSwitch: 'Kill Switch',
     killSwitchDesc: 'Блокировать трафик при разрыве VPN',
     routing: 'Маршрутизация',

@@ -31,6 +31,7 @@ class VpnProvider extends ChangeNotifier {
   String _fragPackets = 'tlshello';
   int _fragLenMin = 100, _fragLenMax = 200;
   int _fragIntMin = 10, _fragIntMax = 20;
+  String _dns = '';         // кастомный DNS (пусто = дефолт 8.8.8.8)
   String? _error;
 
   bool _warpActive = false;
@@ -42,6 +43,7 @@ class VpnProvider extends ChangeNotifier {
   bool _pinging = false;
 
   final _countryCache = <String, String>{};
+  final _countryFetching = <String>{};
   String? _activeCountryCode;
   final _refreshing = <String>{};  // urls currently being refreshed
 
@@ -62,6 +64,7 @@ class VpnProvider extends ChangeNotifier {
   int get fragLenMax => _fragLenMax;
   int get fragIntMin => _fragIntMin;
   int get fragIntMax => _fragIntMax;
+  String get dns => _dns;
   String? get error => _error;
   DateTime? get connectedAt => _connectedAt;
   bool get isConnected => _status == VpnStatus.connected;
@@ -115,6 +118,7 @@ class VpnProvider extends ChangeNotifier {
     _fragLenMax = prefs.getInt('fragLenMax') ?? 200;
     _fragIntMin = prefs.getInt('fragIntMin') ?? 10;
     _fragIntMax = prefs.getInt('fragIntMax') ?? 20;
+    _dns = prefs.getString('dns') ?? '';
     _routingMode = RoutingMode.values.firstWhere(
       (m) => m.name == (prefs.getString('routingMode') ?? 'fullVpn'),
       orElse: () => RoutingMode.fullVpn,
@@ -136,6 +140,7 @@ class VpnProvider extends ChangeNotifier {
     _warpActive = false;
     _awgMode = false;
     _cancelRequested = false;
+    _fetchCountry(_activeProfile!.serverHost);
     _status = VpnStatus.connecting;
     notifyListeners();
     try {
@@ -167,6 +172,7 @@ class VpnProvider extends ChangeNotifier {
             bypassDomains: _bypassDomains,
             ruCidrs: ruCidrs,
             mux: _mux,
+            dns: _dns,
           );
           await _vpn.connect(ConfigBuilder.toJson(config));
         } else {
@@ -184,6 +190,7 @@ class VpnProvider extends ChangeNotifier {
           final tunConfig = ConfigBuilder.buildTun(
             killSwitch: _killSwitch,
             routingMode: _routingMode,
+            dns: _dns,
           );
           await _vpn.connectProxy(
             xrayConfigJson: xrayJson,
@@ -202,10 +209,12 @@ class VpnProvider extends ChangeNotifier {
           routingMode: _routingMode,
           ruCidrs: ruCidrs,
           mux: _mux,
+          dns: _dns,
         );
         final tunConfig = ConfigBuilder.buildTun(
           killSwitch: _killSwitch,
           routingMode: _routingMode,
+          dns: _dns,
         );
         await _vpn.connectProxy(
           singboxConfigJson: ConfigBuilder.toJson(proxyConfig),
@@ -218,6 +227,8 @@ class VpnProvider extends ChangeNotifier {
           routingMode: _routingMode,
           killSwitch: _killSwitch,
           bypassDomains: _bypassDomains,
+          mux: _mux,
+          dns: _dns,
         );
         await _vpn.connect(
           ConfigBuilder.toJson(config),
@@ -403,6 +414,9 @@ class VpnProvider extends ChangeNotifier {
     if (wasActive) {
       // сначала чистое отключение старого (без гонки статусов), затем коннект к новому
       await disconnect();
+      // пауза на устаканивание маршрутизации/интерфейса перед новым коннектом
+      // (иначе QUIC-протоколы — tuic/hysteria — могут не поднять трафик с первого раза)
+      await Future.delayed(const Duration(milliseconds: 1200));
       await connect();
     }
   }
@@ -431,15 +445,28 @@ class VpnProvider extends ChangeNotifier {
     }
   }
 
+  // Код страны для произвольного хоста (для флагов в списке ключей).
+  // Возвращает кеш сразу либо null + запускает фоновую загрузку (с дедупликацией).
+  String? countryCodeFor(String host) {
+    if (host.isEmpty) return null;
+    final cached = _countryCache[host];
+    if (cached != null) return cached;
+    _fetchCountry(host);
+    return null;
+  }
+
   void _fetchCountry(String host) {
     if (host.isEmpty) return;
     if (_countryCache.containsKey(host)) {
-      if (_activeCountryCode != _countryCache[host]) {
+      if (_activeProfile?.serverHost == host &&
+          _activeCountryCode != _countryCache[host]) {
         _activeCountryCode = _countryCache[host];
         notifyListeners();
       }
       return;
     }
+    if (_countryFetching.contains(host)) return;
+    _countryFetching.add(host);
     _doFetchCountry(host);
   }
 
@@ -461,11 +488,14 @@ class VpnProvider extends ChangeNotifier {
           _countryCache[host] = code;
           if (_activeProfile?.serverHost == host) {
             _activeCountryCode = code;
-            notifyListeners();
           }
+          notifyListeners();
         }
       }
-    } catch (_) {}
+    } catch (_) {
+    } finally {
+      _countryFetching.remove(host);
+    }
   }
 
   Future<void> setKillSwitch(bool value) async {
@@ -507,6 +537,13 @@ class VpnProvider extends ChangeNotifier {
     _fragment = value;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('fragment', value);
+    notifyListeners();
+  }
+
+  Future<void> setDns(String value) async {
+    _dns = value.trim();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('dns', _dns);
     notifyListeners();
   }
 

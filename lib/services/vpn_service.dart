@@ -261,25 +261,25 @@ class _WindowsVpnService implements VpnService {
     );
   }
 
-  // Авто-ретрай при гонке создания TUN-адаптера (то, что раньше делалось вручную):
-  // если sing-box падает на "file already exists"/"take too much time" — чистим адаптер и повторяем.
+  // Авто-ретрай старта TUN-форвардера (автоматизирует ручной reconnect).
+  // ВАЖНО: убиваем только сам форвардер (_process), НЕ трогая прокси (_proxyProcess) —
+  // для tuic/hysteria прокси тоже sing-box, и общий taskkill убил бы его.
   Future<void> _launchTun(String configJson) async {
-    for (var attempt = 0; attempt < 3; attempt++) {
+    const maxAttempts = 3;
+    for (var attempt = 0; attempt < maxAttempts; attempt++) {
       try {
         await _launchTunOnce(configJson);
         return;
       } catch (e) {
-        final msg = e.toString();
-        final tunRace = msg.contains('already exists') ||
-            msg.contains('take too much time') ||
-            msg.contains('configure tun interface');
-        if (!tunRace || attempt == 2) rethrow;
-        LogService().add('[tun] гонка адаптера — чистка и ретрай #${attempt + 1}');
-        await Process.run('taskkill', ['/F', '/IM', 'sing-box.exe'], runInShell: false);
+        if (attempt == maxAttempts - 1) rethrow;
+        LogService().add('[tun] старт не удался — чистка и ретрай #${attempt + 1}');
+        // убиваем только зависший форвардер, прокси оставляем живым
+        try { _process?.kill(ProcessSignal.sigterm); } catch (_) {}
+        try { _process?.kill(); } catch (_) {}
         await _outSub?.cancel(); _outSub = null;
         await _errSub?.cancel(); _errSub = null;
         _process = null;
-        await Future.delayed(const Duration(milliseconds: 500));
+        await Future.delayed(const Duration(milliseconds: 600));
         await _removeTunAdapter();
       }
     }

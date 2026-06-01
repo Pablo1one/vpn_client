@@ -1,3 +1,4 @@
+import 'package:country_flags/country_flags.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -302,6 +303,75 @@ class _SubscriptionGroup extends StatelessWidget {
   }
 }
 
+// ── Avatar: флаг страны + бейдж протокола ──────────────────────────────────────
+
+IconData _protoIcon(VpnProtocol p) => switch (p) {
+      VpnProtocol.vless => Icons.security_rounded,
+      VpnProtocol.wireguard => Icons.vpn_lock_rounded,
+      VpnProtocol.tuic => Icons.bolt_rounded,
+      VpnProtocol.hysteria2 => Icons.speed_rounded,
+      VpnProtocol.amnezia => Icons.shield_rounded,
+    };
+
+class _ProfileAvatar extends StatelessWidget {
+  final VpnProfile profile;
+  final bool isActive;
+  final double radius;
+  const _ProfileAvatar({
+    required this.profile,
+    required this.isActive,
+    this.radius = 16,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ac;
+    final cc = context.read<VpnProvider>().countryCodeFor(profile.serverHost);
+    final fg = isActive ? c.primary : c.textMuted;
+    final bg = isActive ? c.primary.withOpacity(0.15) : c.avatarBg;
+    final hasFlag = cc != null && cc.length == 2;
+
+    if (!hasFlag) {
+      return CircleAvatar(
+        radius: radius,
+        backgroundColor: bg,
+        child: Icon(_protoIcon(profile.protocol), size: radius, color: fg),
+      );
+    }
+
+    return SizedBox(
+      width: radius * 2,
+      height: radius * 2,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          ClipOval(
+            child: CountryFlag.fromCountryCode(
+              cc.toUpperCase(),
+              width: radius * 2,
+              height: radius * 2,
+            ),
+          ),
+          Positioned(
+            right: -2,
+            bottom: -2,
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                color: c.card,
+                shape: BoxShape.circle,
+                border: Border.all(color: c.border, width: 0.5),
+              ),
+              child: Icon(_protoIcon(profile.protocol),
+                  size: radius * 0.72, color: fg),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // ── Ping badge ────────────────────────────────────────────────────────────────
 
 class _PingBadge extends StatelessWidget {
@@ -371,16 +441,7 @@ class _InlineProfileTile extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
           child: Row(
             children: [
-              CircleAvatar(
-                radius: 16,
-                backgroundColor:
-                    isActive ? c.primary.withOpacity(0.15) : c.avatarBg,
-                child: Icon(
-                  _icon(profile.protocol),
-                  size: 16,
-                  color: isActive ? c.primary : c.textMuted,
-                ),
-              ),
+              _ProfileAvatar(profile: profile, isActive: isActive, radius: 16),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -426,14 +487,6 @@ class _InlineProfileTile extends StatelessWidget {
       ),
     );
   }
-
-  IconData _icon(VpnProtocol p) => switch (p) {
-        VpnProtocol.vless => Icons.security_rounded,
-        VpnProtocol.wireguard => Icons.vpn_lock_rounded,
-        VpnProtocol.tuic => Icons.bolt_rounded,
-        VpnProtocol.hysteria2 => Icons.speed_rounded,
-        VpnProtocol.amnezia => Icons.shield_rounded,
-      };
 }
 
 // ── Standalone profile card tile ──────────────────────────────────────────────
@@ -471,15 +524,8 @@ class _ProfileTile extends StatelessWidget {
         child: ListTile(
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          leading: CircleAvatar(
-            backgroundColor:
-                isActive ? c.primary.withOpacity(0.15) : c.avatarBg,
-            child: Icon(
-              _icon(profile.protocol),
-              size: 20,
-              color: isActive ? c.primary : c.textMuted,
-            ),
-          ),
+          leading: _ProfileAvatar(
+              profile: profile, isActive: isActive, radius: 20),
           title: Text(profile.name,
               style: const TextStyle(fontWeight: FontWeight.w500)),
           subtitle: Text(
@@ -509,12 +555,4 @@ class _ProfileTile extends StatelessWidget {
       ),
     );
   }
-
-  IconData _icon(VpnProtocol p) => switch (p) {
-        VpnProtocol.vless => Icons.security_rounded,
-        VpnProtocol.wireguard => Icons.vpn_lock_rounded,
-        VpnProtocol.tuic => Icons.bolt_rounded,
-        VpnProtocol.hysteria2 => Icons.speed_rounded,
-        VpnProtocol.amnezia => Icons.shield_rounded,
-      };
 }
