@@ -31,6 +31,8 @@ class L10n {
   final String importProfile;
   final String importHint;
   final String saveProfile;
+  final String keyAlreadyExists;
+  final String duplicatesSkipped;
   final String pasteBtn;
   final String fetchingUrl;
   final String _foundProfiles;
@@ -103,6 +105,8 @@ class L10n {
     required this.importProfile,
     required this.importHint,
     required this.saveProfile,
+    required this.keyAlreadyExists,
+    required this.duplicatesSkipped,
     required this.pasteBtn,
     required this.fetchingUrl,
     required String foundProfiles,
@@ -183,6 +187,8 @@ class L10n {
     importProfile: 'Add',
     importHint: 'Paste a link or subscription URL…',
     saveProfile: 'Save',
+    keyAlreadyExists: 'Key already added',
+    duplicatesSkipped: 'Duplicates skipped',
     pasteBtn: 'Paste',
     fetchingUrl: 'Fetching…',
     foundProfiles: 'Found {n} profiles',
@@ -257,6 +263,8 @@ class L10n {
     importProfile: 'Добавить',
     importHint: 'Вставьте ссылку или URL подписки…',
     saveProfile: 'Сохранить',
+    keyAlreadyExists: 'Ключ уже добавлен',
+    duplicatesSkipped: 'Дубликаты пропущены',
     pasteBtn: 'Вставить',
     fetchingUrl: 'Загрузка…',
     foundProfiles: 'Найдено ключей: {n}',
