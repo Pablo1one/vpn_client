@@ -429,8 +429,11 @@ class _WindowsVpnService implements VpnService {
       }
 
       await _waitForAwgHandshake();
-      await _disableAwgOffload();
-      await _ensureBypassRoute(confContent);
+      // LSO-disable убран: под корректным MTU он душил upload (AmneziaVPN его не делает)
+      // await _disableAwgOffload();
+      // Байпас-роут отключён для теста: wireguard-windows сам добавляет
+      // endpoint-exclusion при AllowedIPs=0/0; ручной /32 может конфликтовать
+      // await _ensureBypassRoute(confContent);
       _awgActive = true;
       _controller.add(VpnStatus.connected);
     } catch (e) {

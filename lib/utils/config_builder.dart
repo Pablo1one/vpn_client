@@ -294,8 +294,10 @@ class ConfigBuilder {
     buf.writeln('PrivateKey = ${c['privateKey']}');
     buf.writeln('Address = ${c['address']}');
     buf.writeln('DNS = $dns');
-    final profileMtu = c['mtu'] as int? ?? 1280;
-    final mtu = Platform.isWindows && profileMtu < 1400 ? 1400 : profileMtu;
+    // MTU строго из ключа (не повышаем): сервер может быть релеем с двойной
+    // WG-инкапсуляцией, где завышенный MTU 1400 даёт фрагментацию и падение
+    // скорости. AmneziaVPN тоже уважает MTU из конфига.
+    final mtu = c['mtu'] ?? 1280;
     buf.writeln('MTU = $mtu');
 
     // AWG-параметры обфускации
