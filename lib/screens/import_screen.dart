@@ -126,14 +126,27 @@ class _ImportScreenState extends State<ImportScreen> {
 
   Future<void> _import() async {
     final vpn = context.read<VpnProvider>();
+    final s = L10n.of(context);
+    String? msg;
     if (_batch != null) {
-      await vpn.addProfiles(_batch!);
+      final added = await vpn.addProfiles(_batch!);
+      if (added == 0) {
+        msg = s.keyAlreadyExists;
+      } else if (added < _batch!.length) {
+        msg = s.duplicatesSkipped;
+      }
     } else if (_parsed != null) {
-      await vpn.addProfile(_parsed!);
+      final ok = await vpn.addProfile(_parsed!);
+      if (!ok) msg = s.keyAlreadyExists;
     } else {
       return;
     }
-    if (mounted) Navigator.pop(context);
+    if (!mounted) return;
+    if (msg != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(msg), duration: const Duration(seconds: 2)));
+    }
+    Navigator.pop(context);
   }
 
   @override

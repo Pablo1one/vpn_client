@@ -100,4 +100,16 @@ class VpnProfile {
     if (raw is String) return int.tryParse(raw) ?? 443;
     return 443;
   }
+
+  // Сигнатура уникального подключения — для отсева дубликатов ключей
+  String get signature {
+    final cred = (config['uuid'] ??
+            config['password'] ??
+            config['privateKey'] ??
+            '')
+        .toString();
+    final transport = (config['transport'] ?? '').toString();
+    final security = (config['security'] ?? '').toString();
+    return '${protocol.name}|$serverHost|$serverPort|$cred|$transport|$security';
+  }
 }

@@ -310,18 +310,31 @@ class VpnProvider extends ChangeNotifier {
     await _vpn.disconnect();
   }
 
-  Future<void> addProfile(VpnProfile profile) async {
+  /// Добавляет профиль. Возвращает false, если такой ключ уже есть (дубликат).
+  Future<bool> addProfile(VpnProfile profile) async {
+    final exists = _profiles.any((e) => e.signature == profile.signature);
+    if (exists) return false;
     await _repo.add(profile);
     _profiles = _repo.getAll().toList();
     notifyListeners();
+    return true;
   }
 
-  Future<void> addProfiles(List<VpnProfile> list) async {
+  /// Добавляет пакет профилей, пропуская дубликаты. Возвращает число добавленных.
+  Future<int> addProfiles(List<VpnProfile> list) async {
+    final existing = _profiles.map((e) => e.signature).toSet();
+    var added = 0;
     for (final p in list) {
+      if (existing.contains(p.signature)) continue;
+      existing.add(p.signature);
       await _repo.add(p);
+      added++;
     }
-    _profiles = _repo.getAll().toList();
-    notifyListeners();
+    if (added > 0) {
+      _profiles = _repo.getAll().toList();
+      notifyListeners();
+    }
+    return added;
   }
 
   Future<void> removeProfile(String id) async {
