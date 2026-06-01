@@ -140,46 +140,50 @@ class _WindowsVpnService implements VpnService {
     _proxyConfigFile = null;
   }
 
-  // sing-box не удаляет tun0 при падении — следующий запуск упадёт с "file already exists"
+  // sing-box не удаляет tun0 при падении — следующий запуск упадёт с "file already exists".
+  // Условная чистка: если sing-box TUN нет (частый случай, особенно при коннекте AWG) —
+  // мгновенно выходим. Задержки только когда реально удаляли адаптер.
+  static const _tunFilter = r'Get-NetAdapter -IncludeHidden | Where-Object {'
+      r' ($_.Name -like "tun*" -or $_.InterfaceDescription -like "*Wintun*")'
+      r' -and $_.Name -ne "' + _awgTunnelName + r'" }';
+
+  Future<int> _tunAdapterCount() async {
+    final r = await Process.run(
+      'powershell', ['-Command', '@($_tunFilter).Count'],
+      runInShell: false,
+    );
+    return int.tryParse((r.stdout as String).trim()) ?? 0;
+  }
+
   Future<void> _removeTunAdapter() async {
-    for (var i = 0; i < 5; i++) {
+    if (await _tunAdapterCount() == 0) return; // нечего удалять — без задержек
+    for (var i = 0; i < 10; i++) {
       await Process.run(
         'powershell',
-        [
-          '-Command',
-          r'Get-NetAdapter | Where-Object { $_.Name -like "tun*" } | '
-              r'Remove-NetAdapter -Confirm:$false -ErrorAction SilentlyContinue',
-        ],
+        ['-Command', '$_tunFilter | Remove-NetAdapter -Confirm:\$false -ErrorAction SilentlyContinue'],
         runInShell: false,
       );
       await Process.run(
         'netsh', ['interface', 'delete', 'interface', 'tun0'],
         runInShell: false,
       );
-      await Future.delayed(const Duration(milliseconds: 700));
-      final check = await Process.run(
-        'powershell',
-        ['-Command', r'@(Get-NetAdapter | Where-Object { $_.Name -like "tun*" }).Count'],
-        runInShell: false,
-      );
-      final count = int.tryParse((check.stdout as String).trim()) ?? 1;
-      if (count == 0) break;
+      if (await _tunAdapterCount() == 0) break;
+      await Future.delayed(const Duration(milliseconds: 400));
     }
-    // ждём пока драйвер WinTun освободит адаптер
-    await Future.delayed(const Duration(milliseconds: 1500));
+    // ждём пока драйвер WinTun освободит адаптер (только если удаляли)
+    await Future.delayed(const Duration(milliseconds: 900));
   }
 
   Future<void> _killExistingProcess() async {
     await Process.run('taskkill', ['/F', '/IM', 'sing-box.exe'], runInShell: false);
     await Process.run('taskkill', ['/F', '/IM', 'xray.exe'], runInShell: false);
     await Process.run('taskkill', ['/F', '/IM', 'amneziawg.exe'], runInShell: false);
-    // ждём завершения процессов перед удалением адаптера
-    await Future.delayed(const Duration(milliseconds: 1400));
+    // короткая пауза на завершение процессов; адаптер чистится условно
+    await Future.delayed(const Duration(milliseconds: 400));
     await _removeTunAdapter();
 
     await _killProxy();
     if (_process == null) {
-      await Future.delayed(const Duration(milliseconds: 1000));
       return;
     }
     await _outSub?.cancel();
@@ -198,7 +202,6 @@ class _WindowsVpnService implements VpnService {
           },
         )
         .catchError((_) => -1);
-    await Future.delayed(const Duration(milliseconds: 1000));
     try { await _configFile?.delete(); } catch (_) {}
     _configFile = null;
   }
@@ -258,7 +261,31 @@ class _WindowsVpnService implements VpnService {
     );
   }
 
+  // Авто-ретрай при гонке создания TUN-адаптера (то, что раньше делалось вручную):
+  // если sing-box падает на "file already exists"/"take too much time" — чистим адаптер и повторяем.
   Future<void> _launchTun(String configJson) async {
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        await _launchTunOnce(configJson);
+        return;
+      } catch (e) {
+        final msg = e.toString();
+        final tunRace = msg.contains('already exists') ||
+            msg.contains('take too much time') ||
+            msg.contains('configure tun interface');
+        if (!tunRace || attempt == 2) rethrow;
+        LogService().add('[tun] гонка адаптера — чистка и ретрай #${attempt + 1}');
+        await Process.run('taskkill', ['/F', '/IM', 'sing-box.exe'], runInShell: false);
+        await _outSub?.cancel(); _outSub = null;
+        await _errSub?.cancel(); _errSub = null;
+        _process = null;
+        await Future.delayed(const Duration(milliseconds: 500));
+        await _removeTunAdapter();
+      }
+    }
+  }
+
+  Future<void> _launchTunOnce(String configJson) async {
     _configFile = File(
       '${Directory.systemTemp.path}\\vpn_client_tun_${DateTime.now().millisecondsSinceEpoch}.json',
     );
@@ -302,27 +329,29 @@ class _WindowsVpnService implements VpnService {
           LogService().add('[tun] $line');
         });
 
+    // последние строки лога — там фатальная ошибка (а не первые WARN/INFO)
+    String tailLog() => allLines.isEmpty
+        ? '(нет вывода)'
+        : (allLines.length > 12
+                ? allLines.sublist(allLines.length - 12)
+                : allLines)
+            .join('\n');
+
     proc.exitCode.then((code) {
       if (_process != proc) return;
       _controller.add(VpnStatus.disconnected);
       if (!started && !ready.isCompleted) {
-        final log = allLines.isNotEmpty
-            ? allLines.take(10).join('\n')
-            : '(нет вывода)';
         ready.completeError(
-            Exception('sing-box (TUN) завершился (код $code):\n$log'));
+            Exception('sing-box (TUN) завершился (код $code):\n${tailLog()}'));
       }
     });
 
     // первый холодный старт wintun занимает до 20 с
     Future.delayed(const Duration(seconds: 25), () {
       if (!started && !ready.isCompleted) {
-        final log = allLines.isNotEmpty
-            ? allLines.take(10).join('\n')
-            : '(нет вывода — нет прав администратора?)';
         _controller.add(VpnStatus.error);
         ready.completeError(
-            Exception('sing-box не запустился за 25 с:\n$log'));
+            Exception('sing-box не запустился за 25 с:\n${tailLog()}'));
       }
     });
 
@@ -394,7 +423,7 @@ class _WindowsVpnService implements VpnService {
       // и последующий uninstall/install может сломаться
       await Process.run('taskkill', ['/F', '/IM', 'sing-box.exe'], runInShell: false);
       await Process.run('taskkill', ['/F', '/IM', 'xray.exe'], runInShell: false);
-      await Future.delayed(const Duration(milliseconds: 1000));
+      await Future.delayed(const Duration(milliseconds: 300));
       await _removeTunAdapter();
       await _killProxy();
       await _outSub?.cancel(); _outSub = null;
@@ -416,11 +445,16 @@ class _WindowsVpnService implements VpnService {
       final confFile = File('${Directory.systemTemp.path}\\$_awgTunnelName.conf');
       await confFile.writeAsString(confContent);
 
-      final result = await Process.run(
-        awgExe.path,
-        ['/installtunnelservice', confFile.path],
-        runInShell: false,
+      // Установка с авто-ретраем: при "already installed" принудительно сносим службу и повторяем
+      ProcessResult result = await Process.run(
+        awgExe.path, ['/installtunnelservice', confFile.path], runInShell: false,
       );
+      for (var attempt = 0; attempt < 2 && result.exitCode != 0; attempt++) {
+        await _forceRemoveAwgService();
+        result = await Process.run(
+          awgExe.path, ['/installtunnelservice', confFile.path], runInShell: false,
+        );
+      }
 
       if (result.exitCode != 0) {
         throw Exception(
@@ -537,13 +571,40 @@ class _WindowsVpnService implements VpnService {
     );
   }
 
+  Future<bool> _awgServiceExists() async {
+    // amneziawg.exe создаёт службу с именем AmneziaWGTunnel$<name>
+    final r = await Process.run(
+      'sc.exe', ['query', 'AmneziaWGTunnel\$$_awgTunnelName'],
+      runInShell: false,
+    );
+    // exit 0 = служба есть; 1060 = нет такой службы
+    return r.exitCode == 0;
+  }
+
   Future<void> _uninstallAwgTunnel() async {
     _awgActive = false;
+    if (!await _awgServiceExists()) return; // нечего удалять — мгновенно
     final awgExe = '$_binDir\\amneziawg.exe';
-    // Всегда пробуем удалить — если туннеля нет, amneziawg вернёт ненулевой код, игнорируем
     await Process.run(awgExe, ['/uninstalltunnelservice', _awgTunnelName],
         runInShell: false);
-    await Future.delayed(const Duration(milliseconds: 500));
+    // дожидаемся исчезновения службы; если за ~3с не ушла — принудительно
+    for (var i = 0; i < 10; i++) {
+      await Future.delayed(const Duration(milliseconds: 300));
+      if (!await _awgServiceExists()) return;
+    }
+    await _forceRemoveAwgService();
+  }
+
+  // Принудительный снос службы туннеля через SCM (когда /uninstalltunnelservice не справился)
+  Future<void> _forceRemoveAwgService() async {
+    final svc = 'AmneziaWGTunnel\$$_awgTunnelName';
+    await Process.run('taskkill', ['/F', '/IM', 'amneziawg.exe'], runInShell: false);
+    await Process.run('sc.exe', ['stop', svc], runInShell: false);
+    await Process.run('sc.exe', ['delete', svc], runInShell: false);
+    for (var i = 0; i < 15; i++) {
+      await Future.delayed(const Duration(milliseconds: 300));
+      if (!await _awgServiceExists()) return;
+    }
   }
 
   Future<void> _clearSystemProxy() async {
