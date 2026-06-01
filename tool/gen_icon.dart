@@ -2,14 +2,16 @@
 // Generates windows/runner/resources/app_icon.ico with a lightning bolt.
 
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 void main() {
   const sizes = [16, 32, 48, 64, 128, 256];
   final ico = _buildIco([for (final s in sizes) (s, _renderBolt(s))]);
   File('windows/runner/resources/app_icon.ico').writeAsBytesSync(ico);
-  // превью для визуальной проверки
+  // превью для визуальной проверки (крупное и размер таскбара)
   File('tool/icon_preview.png').writeAsBytesSync(_encodePng(256, _renderBolt(256)));
+  File('tool/icon_preview48.png').writeAsBytesSync(_encodePng(48, _renderBolt(48)));
   print('app_icon.ico written (${sizes.join(", ")} px) + tool/icon_preview.png');
 }
 
@@ -92,61 +94,75 @@ int _crc32(Uint8List d) {
 
 // ── Polygon definition ────────────────────────────────────────────────────────
 
-// Горизонтальная молния (стиль Lightning McQueen): болт с ОСТРЫМИ концами.
-// Вертикальный острый болт (13,0)(3,14)(10,14)(11,24)(21,10)(14,10),
-// повёрнут на 90° по часовой: (x,y)->(24-y, x). Острые торцы слева и справа.
-const _vx = [24/24, 10/24, 10/24,  0/24, 14/24, 14/24];
-const _vy = [13/24,  3/24, 10/24, 11/24, 21/24, 14/24];
+// Горизонтальная молния (⚡, стиль Lightning McQueen): классический болт "zap"
+// (13,2)(3,14)(12,14)(11,22)(21,10)(12,10), повёрнут на 90° по часовой (x,y)->(24-y,x).
+// Острые концы слева и справа, выраженный зигзаг.
+// Та же форма молнии, но сжата по вертикали → горизонтальная ориентация
+const _vx = [0.04, 0.60, 0.45, 0.96, 0.40, 0.55];
+const _vy = [0.44, 0.30, 0.47, 0.56, 0.70, 0.53];
 
-// ── Scanline polygon fill ──────────────────────────────────────────────────────
+// ── Рендер с дилатацией (равномерный контур, сохраняет вогнутую форму) ─────────
 
 Uint32List _renderBolt(int size) {
-  final px = Uint32List(size * size); // ARGB, transparent by default
-  const black  = 0xFF101010; // обводка
-  const red    = 0xFFE01600; // контур McQueen
+  final px = Uint32List(size * size); // ARGB, transparent
+  const black  = 0xFF101010; // обводка (внешняя)
+  const red    = 0xFFE01600; // контур McQueen (средняя)
   const yellow = 0xFFFFCC00; // заливка
 
-  // три концентрических слоя (от центра): чёрный → красный → жёлтый
-  _fillScaled(px, size, 0.96, black);
-  _fillScaled(px, size, 0.86, red);
-  _fillScaled(px, size, 0.74, yellow);
+  // 1) маска "внутри полигона" (point-in-polygon)
+  final inside = List<bool>.filled(size * size, false);
+  for (var y = 0; y < size; y++) {
+    for (var x = 0; x < size; x++) {
+      if (_pointInPoly((x + 0.5) / size, (y + 0.5) / size)) {
+        inside[y * size + x] = true;
+      }
+    }
+  }
+
+  final rRed = size * 0.05;          // толщина красного контура
+  final rBlack = size * 0.085;       // + чёрная обводка
+  final scan = rBlack.ceil();
+
+  for (var y = 0; y < size; y++) {
+    for (var x = 0; x < size; x++) {
+      final idx = y * size + x;
+      if (inside[idx]) {
+        px[idx] = yellow;
+        continue;
+      }
+      // расстояние до ближайшего "внутреннего" пикселя (дилатация)
+      var best = double.infinity;
+      final y0 = (y - scan).clamp(0, size - 1), y1 = (y + scan).clamp(0, size - 1);
+      final x0 = (x - scan).clamp(0, size - 1), x1 = (x + scan).clamp(0, size - 1);
+      for (var yy = y0; yy <= y1 && best > rRed; yy++) {
+        for (var xx = x0; xx <= x1; xx++) {
+          if (!inside[yy * size + xx]) continue;
+          final d = ((xx - x) * (xx - x) + (yy - y) * (yy - y)).toDouble();
+          if (d < best) best = d;
+        }
+      }
+      final dist = best == double.infinity ? best : sqrt(best);
+      if (dist <= rRed) {
+        px[idx] = red;
+      } else if (dist <= rBlack) {
+        px[idx] = black;
+      }
+    }
+  }
   return px;
 }
 
-// центроид нормализованного полигона
-double get _cx => _vx.reduce((a, b) => a + b) / _vx.length;
-double get _cy => _vy.reduce((a, b) => a + b) / _vy.length;
-
-void _fillScaled(Uint32List px, int size, double scale, int color) {
-  for (var y = 0; y < size; y++) {
-    for (final x in _scanAt(y + 0.5, size, scale)) {
-      px[y * size + x] = color;
-    }
-  }
-}
-
-// заливка полигона на скан-линии y; полигон масштабируется от центроида на scale
-Iterable<int> _scanAt(double y, int size, double scale) sync* {
-  final cx = _cx, cy = _cy;
+bool _pointInPoly(double px, double py) {
+  var inside = false;
   final n = _vx.length;
-  final xs = <double>[];
-  for (var i = 0; i < n; i++) {
-    final j = (i + 1) % n;
-    final y0 = (cy + (_vy[i] - cy) * scale) * size;
-    final y1 = (cy + (_vy[j] - cy) * scale) * size;
-    final x0 = (cx + (_vx[i] - cx) * scale) * size;
-    final x1 = (cx + (_vx[j] - cx) * scale) * size;
-    if ((y0 < y && y <= y1) || (y1 < y && y <= y0)) {
-      xs.add(x0 + (y - y0) / (y1 - y0) * (x1 - x0));
+  for (var i = 0, j = n - 1; i < n; j = i++) {
+    final xi = _vx[i], yi = _vy[i], xj = _vx[j], yj = _vy[j];
+    if (((yi > py) != (yj > py)) &&
+        (px < (xj - xi) * (py - yi) / (yj - yi) + xi)) {
+      inside = !inside;
     }
   }
-  if (xs.length < 2) return;
-  xs.sort();
-  for (var k = 0; k + 1 < xs.length; k += 2) {
-    final xStart = xs[k].ceil().clamp(0, size - 1);
-    final xEnd = xs[k + 1].floor().clamp(0, size - 1);
-    for (var x = xStart; x <= xEnd; x++) yield x;
-  }
+  return inside;
 }
 
 // ── ICO builder ────────────────────────────────────────────────────────────────

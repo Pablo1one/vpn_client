@@ -18,6 +18,7 @@ class ConfigBuilder {
     bool killSwitch = false,
     List<String> bypassDomains = const [],
     List<String> ruCidrs = const [],
+    bool mux = false,
   }) {
     final Map<String, dynamic> outbound = switch (profile.protocol) {
       // dns-direct: резолв адреса сервера напрямую, без петли через proxy
@@ -27,6 +28,7 @@ class ConfigBuilder {
       VpnProtocol.hysteria2 => _hysteria2(profile.config),
       _ => throw ArgumentError('build: unsupported protocol ${profile.protocol}'),
     };
+    if (mux) outbound['multiplex'] = _singboxMux();
 
     final serverAddress = profile.config['server'] as String? ?? '';
     final rules = <Map<String, dynamic>>[
@@ -163,12 +165,27 @@ class ConfigBuilder {
     VpnProfile profile, {
     RoutingMode routingMode = RoutingMode.fullVpn,
     List<String> ruCidrs = const [],
+    bool mux = false,
+    bool fragment = false,
+    String fragPackets = 'tlshello',
+    String fragLength = '100-200',
+    String fragInterval = '10-20',
   }) {
     final c = profile.config;
     final transport = (c['transport'] as String? ?? 'tcp').trim();
     final rawFlow = (c['flow'] as String? ?? '').trim();
     // gRPC не совместим с xtls flow — xray упадёт молча
     final flow = (transport == 'grpc') ? '' : rawFlow;
+    // MUX несовместим с xtls-rprx-vision flow
+    final muxOk = mux && flow.isEmpty;
+
+    final stream = _xrayStream(c);
+    // фрагментация: проксируем диалер через fragment-outbound
+    if (fragment) {
+      final sockopt = (stream['sockopt'] as Map<String, dynamic>?) ?? {};
+      sockopt['dialerProxy'] = 'fragment';
+      stream['sockopt'] = sockopt;
+    }
 
     final config = {
       'log': {'loglevel': 'info'},
@@ -198,9 +215,23 @@ class ConfigBuilder {
               },
             ],
           },
-          'streamSettings': _xrayStream(c),
+          'streamSettings': stream,
+          if (muxOk) 'mux': {'enabled': true, 'concurrency': 8},
           'tag': 'proxy',
         },
+        if (fragment)
+          {
+            'protocol': 'freedom',
+            'settings': {
+              'fragment': {
+                'packets': fragPackets,
+                'length': fragLength,
+                'interval': fragInterval,
+              },
+              'domainStrategy': 'UseIP',
+            },
+            'tag': 'fragment',
+          },
         {
           'protocol': 'freedom',
           'settings': {'domainStrategy': 'UseIPv4'},
@@ -222,6 +253,7 @@ class ConfigBuilder {
     VpnProfile profile, {
     RoutingMode routingMode = RoutingMode.fullVpn,
     List<String> ruCidrs = const [],
+    bool mux = false,
   }) {
     final outbound = switch (profile.protocol) {
       // dns-direct — bootstrap DNS для резолва хоста сервера без循环
@@ -232,6 +264,10 @@ class ConfigBuilder {
       _ => throw ArgumentError(
           'buildSingboxProxy: unsupported protocol ${profile.protocol}'),
     };
+    // MUX (tuic/hysteria — QUIC, мультиплекс не применяется; только vless)
+    if (mux && profile.protocol == VpnProtocol.vless) {
+      outbound['multiplex'] = _singboxMux();
+    }
 
     final serverAddress = profile.config['server'] as String? ?? '';
     final rules = <Map<String, dynamic>>[
@@ -425,6 +461,13 @@ class ConfigBuilder {
 
     return {'domainStrategy': 'IPIfNonMatch', 'rules': rules};
   }
+
+  // sing-box multiplex (требует поддержки на сервере)
+  static Map<String, dynamic> _singboxMux() => {
+        'enabled': true,
+        'protocol': 'h2mux',
+        'max_streams': 8,
+      };
 
   static Map<String, dynamic> _singboxVless(Map<String, dynamic> c) {
     final transport = c['transport'] as String? ?? 'tcp';

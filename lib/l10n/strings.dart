@@ -16,6 +16,13 @@ class L10n {
   final String connection;
   final String killSwitch;
   final String killSwitchDesc;
+  final String advanced;
+  final String muxTitle;
+  final String muxDesc;
+  final String fragmentTitle;
+  final String fragmentDesc;
+  final String warpTitle;
+  final String warpDesc;
   final String routing;
   final String routingFull;
   final String routingRussia;
@@ -90,6 +97,13 @@ class L10n {
     required this.connection,
     required this.killSwitch,
     required this.killSwitchDesc,
+    required this.advanced,
+    required this.muxTitle,
+    required this.muxDesc,
+    required this.fragmentTitle,
+    required this.fragmentDesc,
+    required this.warpTitle,
+    required this.warpDesc,
     required this.routing,
     required this.routingFull,
     required this.routingRussia,
@@ -172,6 +186,13 @@ class L10n {
     connection: 'Connection',
     killSwitch: 'Kill Switch',
     killSwitchDesc: 'Block all traffic if VPN drops',
+    advanced: 'Advanced',
+    muxTitle: 'Multiplexing (MUX)',
+    muxDesc: 'Reuse one connection. Requires server support',
+    fragmentTitle: 'TLS fragmentation',
+    fragmentDesc: 'Split TLS handshake to bypass DPI',
+    warpTitle: 'Cloudflare WARP',
+    warpDesc: 'Connect via WARP (CDN tab)',
     routing: 'Routing',
     routingFull: 'Full VPN',
     routingRussia: 'Russia bypass',
@@ -246,6 +267,13 @@ class L10n {
     error: 'Ошибка',
     noProfile: 'Профиль не выбран',
     connection: 'Подключение',
+    advanced: 'Дополнительно',
+    muxTitle: 'Мультиплексирование (MUX)',
+    muxDesc: 'Переиспользование соединения. Требует поддержки на сервере',
+    fragmentTitle: 'TLS-фрагментация',
+    fragmentDesc: 'Дробит TLS-хендшейк для обхода DPI',
+    warpTitle: 'Cloudflare WARP',
+    warpDesc: 'Подключиться через WARP (вкладка CDN)',
     killSwitch: 'Kill Switch',
     killSwitchDesc: 'Блокировать трафик при разрыве VPN',
     routing: 'Маршрутизация',
