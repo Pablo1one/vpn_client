@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/vpn_provider.dart';
 import '../providers/language_provider.dart';
+import '../providers/theme_provider.dart';
 import '../services/speed_service.dart';
 import '../services/vpn_service.dart';
 import '../utils/config_builder.dart';
@@ -14,12 +15,20 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final vpn = context.watch<VpnProvider>();
-    context.watch<LanguageProvider>();
+    final lang = context.watch<LanguageProvider>();
+    final theme = context.watch<ThemeProvider>();
     final s = L10n.of(context);
 
     final c = context.ac;
     return Scaffold(
-      appBar: AppBar(title: const Text('LightningMcQueen')),
+      appBar: AppBar(
+        title: const Text('LightningMcQueen'),
+        actions: [
+          _LangToggle(lang: lang),
+          _ThemeToggle(theme: theme),
+          const SizedBox(width: 6),
+        ],
+      ),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -29,11 +38,13 @@ class HomeScreen extends StatelessWidget {
             _ConnectButton(
               status: vpn.status,
               hasProfile: vpn.activeProfile != null,
-              onTap: vpn.isBusy
+              onTap: vpn.status == VpnStatus.disconnecting
                   ? null
-                  : vpn.isConnected
-                      ? vpn.disconnect
-                      : vpn.connect,
+                  : vpn.status == VpnStatus.connecting
+                      ? vpn.cancelConnect
+                      : vpn.isConnected
+                          ? vpn.disconnect
+                          : vpn.connect,
             ),
             const SizedBox(height: 16),
             _ConnectionTimer(connectedAt: vpn.connectedAt),
@@ -136,6 +147,7 @@ class _ConnectButtonState extends State<_ConnectButton>
     with TickerProviderStateMixin {
   late final AnimationController _spin;
   late final AnimationController _pulse;
+  bool _pressed = false;
 
   @override
   void initState() {
@@ -179,55 +191,77 @@ class _ConnectButtonState extends State<_ConnectButton>
     final c = context.ac;
     final connected = widget.status == VpnStatus.connected;
     final busy = _busy;
-    final active = widget.hasProfile && !busy;
+    final tappable = widget.onTap != null;
+    final canPress = widget.hasProfile && tappable;
 
     final btnColor = connected
         ? c.secondary
-        : active
-            ? c.btnActive
-            : c.btnInactive;
+        : busy
+            ? c.primary
+            : canPress
+                ? c.btnActive
+                : c.btnInactive;
 
-    final button = AnimatedContainer(
-      duration: const Duration(milliseconds: 350),
-      width: 168, height: 168,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: btnColor.withOpacity(connected ? 0.12 : 0.07),
-        border: Border.all(
-          color: btnColor.withOpacity(active ? 0.85 : 0.25),
-          width: connected ? 2.5 : 2,
+    final button = AnimatedScale(
+      scale: _pressed ? 0.93 : 1.0,
+      duration: const Duration(milliseconds: 110),
+      curve: Curves.easeOut,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 350),
+        width: 168, height: 168,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          // объёмный градиент: светлее сверху, темнее снизу
+          gradient: RadialGradient(
+            center: const Alignment(-0.3, -0.45),
+            radius: 0.95,
+            colors: [
+              btnColor.withOpacity(connected ? 0.28 : 0.16),
+              btnColor.withOpacity(connected ? 0.10 : 0.05),
+            ],
+          ),
+          border: Border.all(
+            // подключено — жёлтый контур поверх красного фона
+            color: connected
+                ? c.upload
+                : btnColor.withOpacity(canPress ? 0.85 : 0.35),
+            width: connected ? 3 : 2,
+          ),
+          boxShadow: connected
+              ? [
+                  BoxShadow(color: c.secondary.withOpacity(0.65), blurRadius: 20, spreadRadius: 4),
+                  BoxShadow(color: c.secondary.withOpacity(0.38), blurRadius: 55, spreadRadius: 14),
+                  BoxShadow(color: c.secondary.withOpacity(0.16), blurRadius: 100, spreadRadius: 28),
+                ]
+              : [
+                  // лёгкая глубина даже в покое
+                  BoxShadow(
+                    color: btnColor.withOpacity(canPress ? 0.30 : 0.0),
+                    blurRadius: _pressed ? 6 : 18,
+                    spreadRadius: _pressed ? 0 : 2,
+                  ),
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.25),
+                    blurRadius: _pressed ? 3 : 10,
+                    offset: Offset(0, _pressed ? 1 : 4),
+                  ),
+                ],
         ),
-        boxShadow: connected
-            ? [
-                BoxShadow(
-                  color: c.secondary.withOpacity(0.65),
-                  blurRadius: 20,
-                  spreadRadius: 4,
-                ),
-                BoxShadow(
-                  color: c.secondary.withOpacity(0.38),
-                  blurRadius: 55,
-                  spreadRadius: 14,
-                ),
-                BoxShadow(
-                  color: c.secondary.withOpacity(0.16),
-                  blurRadius: 100,
-                  spreadRadius: 28,
-                ),
-              ]
-            : null,
-      ),
-      child: Icon(
-        Icons.power_settings_new_rounded,
-        size: 68,
-        color: btnColor.withOpacity(active ? 1 : 0.3),
+        child: Icon(
+          busy ? Icons.close_rounded : Icons.power_settings_new_rounded,
+          size: 68,
+          color: btnColor.withOpacity(canPress || connected || busy ? 1 : 0.3),
+        ),
       ),
     );
 
     return MouseRegion(
-      cursor: active ? SystemMouseCursors.click : MouseCursor.defer,
+      cursor: tappable ? SystemMouseCursors.click : MouseCursor.defer,
       child: GestureDetector(
-        onTap: active ? widget.onTap : null,
+        onTap: widget.onTap,
+        onTapDown: tappable ? (_) => setState(() => _pressed = true) : null,
+        onTapUp: tappable ? (_) => setState(() => _pressed = false) : null,
+        onTapCancel: tappable ? () => setState(() => _pressed = false) : null,
         child: SizedBox(
           width: 220,
           height: 220,
@@ -454,6 +488,54 @@ class _Stat extends StatelessWidget {
               )),
         ],
       );
+}
+
+// ── Переключатели темы и языка (компактные, на главной) ──────────────────────
+
+class _ThemeToggle extends StatelessWidget {
+  final ThemeProvider theme;
+  const _ThemeToggle({required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = theme.isDark;
+    return IconButton(
+      tooltip: dark ? 'Светлая тема' : 'Тёмная тема',
+      iconSize: 20,
+      icon: Icon(dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded),
+      onPressed: () => theme.setTheme(
+        dark ? AppThemeName.lightningMcQueen : AppThemeName.jacksonStorm,
+      ),
+    );
+  }
+}
+
+class _LangToggle extends StatelessWidget {
+  final LanguageProvider lang;
+  const _LangToggle({required this.lang});
+
+  @override
+  Widget build(BuildContext context) {
+    final isRu = lang.locale.languageCode == 'ru';
+    return Tooltip(
+      message: isRu ? 'English' : 'Русский',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => lang.setLocale(Locale(isRu ? 'en' : 'ru')),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: CountryFlag.fromCountryCode(
+              isRu ? 'RU' : 'US',
+              width: 26,
+              height: 18,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 // ── Routing mode badge ────────────────────────────────────────────────────────

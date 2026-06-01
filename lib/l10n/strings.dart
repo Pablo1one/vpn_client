@@ -56,6 +56,7 @@ class L10n {
   final String logsCopied;
   final String noLogs;
   final String refreshSubscription;
+  final String deleteSubscription;
   final String standaloneKeys;
   final String subscriptionLabel;
   final String themeSection;
@@ -126,6 +127,7 @@ class L10n {
     required this.logsCopied,
     required this.noLogs,
     required this.refreshSubscription,
+    required this.deleteSubscription,
     required this.standaloneKeys,
     required this.subscriptionLabel,
     required this.themeSection,
@@ -205,6 +207,7 @@ class L10n {
     logsCopied: 'Copied',
     noLogs: 'No logs yet',
     refreshSubscription: 'Refresh',
+    deleteSubscription: 'Delete subscription',
     standaloneKeys: 'Standalone keys',
     subscriptionLabel: 'Subscription',
     themeSection: 'Theme',
@@ -277,6 +280,7 @@ class L10n {
     logsCopied: 'Скопировано',
     noLogs: 'Логов пока нет',
     refreshSubscription: 'Обновить',
+    deleteSubscription: 'Удалить подписку',
     standaloneKeys: 'Отдельные ключи',
     subscriptionLabel: 'Подписка',
     themeSection: 'Тема',

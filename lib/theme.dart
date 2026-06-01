@@ -126,8 +126,8 @@ const _mcColors = AppColors(
   textMuted:     Color(0xFF9A9A9A),
   border:        Color(0xFFEED8D6),
   borderFaint:   Color(0xFFF4E8E6),
-  btnInactive:   Color(0xFFB0B0B0),  // серый = нет профиля
-  btnActive:     Color(0xFF888888),  // серый = есть профиль, не подключено
+  btnInactive:   Color(0xFFE8DCA8),  // бледно-жёлтый = нет профиля
+  btnActive:     Color(0xFFFFCC00),  // McQueen-жёлтый = есть профиль, не подключено
   avatarBg:      Color(0xFFFFF0EE),
 );
 

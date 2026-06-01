@@ -33,7 +33,7 @@ class ProfilesScreen extends StatelessWidget {
                     ),
                   )
                 : IconButton(
-                    icon: const Icon(Icons.network_ping_rounded),
+                    icon: const Icon(Icons.speed_rounded),
                     tooltip: vpn.isConnected
                         ? 'Отключитесь для измерения пинга'
                         : 'Пинг',
@@ -183,6 +183,25 @@ class _SubscriptionGroup extends StatelessWidget {
     }
   }
 
+  Future<void> _confirmDeleteSubscription(BuildContext context) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(s.deleteSubscription),
+        content: Text('${_shortUrl(url)}\n${profiles.length}'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(s.cancel)),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(s.delete)),
+        ],
+      ),
+    );
+    if (confirm == true) vpn.removeSubscription(url);
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.ac;
@@ -243,6 +262,20 @@ class _SubscriptionGroup extends StatelessWidget {
                       ),
                     ),
                   ),
+                MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    onTap: () => _confirmDeleteSubscription(context),
+                    child: Tooltip(
+                      message: s.deleteSubscription,
+                      child: Padding(
+                        padding: const EdgeInsets.all(6),
+                        child: Icon(Icons.delete_sweep_rounded,
+                            size: 18, color: c.textMuted),
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
