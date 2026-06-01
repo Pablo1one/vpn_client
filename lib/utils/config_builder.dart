@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 import '../models/profile.dart';
 
 enum RoutingMode { fullVpn, russiaBypass, custom }
@@ -10,6 +11,23 @@ const _kPrivateCidrs = [
 ];
 
 class ConfigBuilder {
+  // Случайный секрет для clash_api: порт 9090 слушается на localhost, и с пустым
+  // секретом любое локальное приложение могло бы управлять sing-box (менять прокси,
+  // читать трафик). Секрет генерируется один раз на запуск и шарится со SpeedService.
+  static final String clashApiSecret = _genHex(16);
+
+  // Логин/пароль для локального socks 10808: иначе любое локальное приложение
+  // могло бы бесплатно ходить через наш VPN как через открытый прокси.
+  // Inbound (прокси) и outbound (TUN-форвардер) берут одни и те же креды отсюда.
+  static final String socksUser = 'lm_${_genHex(4)}';
+  static final String socksPass = _genHex(12);
+
+  static String _genHex(int bytes) {
+    final r = Random.secure();
+    return List.generate(
+        bytes, (_) => r.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
+  }
+
   // мобильный: полный singbox конфиг (tun + аутбаунд протокола)
   static Map<String, dynamic> build(
     VpnProfile profile, {
@@ -21,6 +39,7 @@ class ConfigBuilder {
     String dns = '8.8.8.8',
     bool allowInsecure = false,
     bool tfo = false,
+    bool ipv6 = false,
   }) {
     final dnsAddr = dns.trim().isEmpty ? '8.8.8.8' : dns.trim();
     final Map<String, dynamic> outbound = switch (profile.protocol) {
@@ -59,7 +78,7 @@ class ConfigBuilder {
       'experimental': {
         'clash_api': {
           'external_controller': '127.0.0.1:9090',
-          'secret': '',
+          'secret': clashApiSecret,
         },
       },
       'dns': {
@@ -81,9 +100,10 @@ class ConfigBuilder {
           'type': 'tun',
           'tag': 'tun-in',
           'interface_name': 'tun0',
-          // только IPv4: на Windows с отключённым IPv6 назначение IPv6-адреса
-          // на TUN падает с "set ipv6 address: Element not found"
-          'address': ['172.19.0.1/30'],
+          // IPv4 всегда; IPv6 — только если включён в системе (иначе на TUN
+          // падает "set ipv6 address: Element not found"). Без захвата IPv6 был
+          // бы leak: трафик к AAAA-хостам уходил бы мимо туннеля.
+          'address': ['172.19.0.1/30', if (ipv6) 'fdfe:dcba:9876::1/126'],
           'mtu': 1400,
           'auto_route': true,
           'strict_route': killSwitch,
@@ -111,6 +131,7 @@ class ConfigBuilder {
     bool killSwitch = false,
     RoutingMode routingMode = RoutingMode.fullVpn,
     String dns = '8.8.8.8',
+    bool ipv6 = false,
   }) {
     final dnsAddr = dns.trim().isEmpty ? '8.8.8.8' : dns.trim();
     return {
@@ -118,7 +139,7 @@ class ConfigBuilder {
         'experimental': {
           'clash_api': {
             'external_controller': '127.0.0.1:9090',
-            'secret': '',
+            'secret': clashApiSecret,
           },
         },
         'dns': {
@@ -135,7 +156,7 @@ class ConfigBuilder {
             'type': 'tun',
             'tag': 'tun-in',
             'interface_name': 'tun0',
-            'address': ['172.19.0.1/30'],
+            'address': ['172.19.0.1/30', if (ipv6) 'fdfe:dcba:9876::1/126'],
             'mtu': 1400,
             'auto_route': true,
             'strict_route': true,
@@ -149,6 +170,8 @@ class ConfigBuilder {
             'server': '127.0.0.1',
             'server_port': 10808,
             'udp_fragment': true,
+            'username': socksUser,
+            'password': socksPass,
             'domain_resolver': {'server': 'dns', 'strategy': 'prefer_ipv4'},
           },
           {
@@ -205,13 +228,19 @@ class ConfigBuilder {
     }
 
     final config = {
-      'log': {'loglevel': 'info'},
+      'log': {'loglevel': 'warning'},
       'inbounds': [
         {
           'listen': '127.0.0.1',
           'port': 10808,
           'protocol': 'socks',
-          'settings': {'auth': 'noauth', 'udp': true},
+          'settings': {
+            'auth': 'password',
+            'accounts': [
+              {'user': socksUser, 'pass': socksPass},
+            ],
+            'udp': true,
+          },
         },
       ],
       'outbounds': [
@@ -308,7 +337,7 @@ class ConfigBuilder {
     }
 
     return {
-      'log': {'level': 'info'},
+      'log': {'level': 'warn'},
       'dns': {
         'servers': [
           {
@@ -330,6 +359,9 @@ class ConfigBuilder {
           'tag': 'socks-in',
           'listen': '127.0.0.1',
           'listen_port': 10808,
+          'users': [
+            {'username': socksUser, 'password': socksPass},
+          ],
         },
       ],
       'outbounds': [

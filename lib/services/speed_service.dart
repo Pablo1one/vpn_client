@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 
+import '../utils/config_builder.dart';
+
 class SpeedData {
   final int uploadBps;
   final int downloadBps;
@@ -14,6 +16,10 @@ class SpeedData {
 class SpeedService {
   static const _apiBase = 'http://127.0.0.1:9090';
   static const _pingUrl = 'http://cp.cloudflare.com/generate_204';
+
+  // тот же секрет, что вшит в конфиг clash_api — иначе API ответит 401
+  Map<String, String> get _authHeaders =>
+      {'Authorization': 'Bearer ${ConfigBuilder.clashApiSecret}'};
 
   final _controller = StreamController<SpeedData>.broadcast();
   http.Client? _client;
@@ -140,6 +146,7 @@ class SpeedService {
       try {
         _client = http.Client();
         final req = http.Request('GET', Uri.parse('$_apiBase/traffic'));
+        req.headers.addAll(_authHeaders);
         final resp = await _client!.send(req).timeout(const Duration(seconds: 3));
 
         await for (final line in resp.stream
@@ -171,8 +178,10 @@ class SpeedService {
       final c = http.Client();
       try {
         final resp = await c
-            .get(Uri.parse(
-                '$_apiBase/proxies/proxy/delay?timeout=5000&url=$_pingUrl'))
+            .get(
+                Uri.parse(
+                    '$_apiBase/proxies/proxy/delay?timeout=5000&url=$_pingUrl'),
+                headers: _authHeaders)
             .timeout(const Duration(seconds: 6));
         if (resp.statusCode == 200) {
           final j = jsonDecode(resp.body) as Map<String, dynamic>;
