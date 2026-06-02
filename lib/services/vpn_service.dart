@@ -271,14 +271,16 @@ class _WindowsVpnService implements VpnService {
         await _launchTunOnce(configJson);
         return;
       } catch (e) {
-        if (attempt == maxAttempts - 1) rethrow;
-        LogService().add('[tun] старт не удался — чистка и ретрай #${attempt + 1}');
-        // убиваем только зависший форвардер, прокси оставляем живым
+        // убиваем только зависший форвардер, прокси оставляем живым.
+        // Чистим и на последней попытке — иначе остался бы работающий туннель
+        // с error-статусом (серая кнопка при живом коннекте).
         try { _process?.kill(ProcessSignal.sigterm); } catch (_) {}
         try { _process?.kill(); } catch (_) {}
         await _outSub?.cancel(); _outSub = null;
         await _errSub?.cancel(); _errSub = null;
         _process = null;
+        if (attempt == maxAttempts - 1) rethrow;
+        LogService().add('[tun] старт не удался — чистка и ретрай #${attempt + 1}');
         await Future.delayed(const Duration(milliseconds: 600));
         await _removeTunAdapter();
       }
@@ -298,36 +300,23 @@ class _WindowsVpnService implements VpnService {
     );
     final proc = _process!;
 
-    bool started = false;
-    final ready = Completer<void>();
     final allLines = <String>[];
+    bool exited = false;
 
-    void checkLine(String line) {
+    void log(String line) {
       if (line.isEmpty) return;
       allLines.add(line.trim());
-      if (!started &&
-          (line.contains('sing-box started') ||
-              (line.contains('started') && line.contains('inbound/')))) {
-        started = true;
-        if (!ready.isCompleted) ready.complete();
-      }
+      LogService().add('[tun] $line');
     }
 
     _outSub = proc.stdout
         .transform(utf8.decoder)
         .transform(const LineSplitter())
-        .listen((line) {
-          checkLine(line);
-          LogService().add('[tun] $line');
-        });
-
+        .listen(log);
     _errSub = proc.stderr
         .transform(utf8.decoder)
         .transform(const LineSplitter())
-        .listen((line) {
-          checkLine(line);
-          LogService().add('[tun] $line');
-        });
+        .listen(log);
 
     // последние строки лога — там фатальная ошибка (а не первые WARN/INFO)
     String tailLog() => allLines.isEmpty
@@ -337,25 +326,29 @@ class _WindowsVpnService implements VpnService {
                 : allLines)
             .join('\n');
 
+    // процесс умер (туннель упал позже) → сообщаем об отключении
     proc.exitCode.then((code) {
-      if (_process != proc) return;
-      _controller.add(VpnStatus.disconnected);
-      if (!started && !ready.isCompleted) {
-        ready.completeError(
-            Exception('sing-box (TUN) завершился (код $code):\n${tailLog()}'));
-      }
+      exited = true;
+      if (_process == proc) _controller.add(VpnStatus.disconnected);
     });
 
-    // первый холодный старт wintun занимает до 20 с
-    Future.delayed(const Duration(seconds: 25), () {
-      if (!started && !ready.isCompleted) {
-        _controller.add(VpnStatus.error);
-        ready.completeError(
-            Exception('sing-box не запустился за 25 с:\n${tailLog()}'));
+    // Готовность — по открытию clash_api (9090), а не по строке в логе:
+    // парсинг лога давал ложные таймауты (туннель работал, а кнопка серела).
+    // Холодный старт wintun — до ~25 с, потому бюджет ~30 с.
+    for (var i = 0; i < 60; i++) {
+      if (exited) {
+        throw Exception('sing-box (TUN) завершился:\n${tailLog()}');
       }
-    });
-
-    await ready.future;
+      try {
+        final s = await Socket.connect('127.0.0.1', 9090,
+            timeout: const Duration(milliseconds: 300));
+        await s.close();
+        return; // sing-box поднял clash_api → точно готов
+      } catch (_) {}
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+    _controller.add(VpnStatus.error);
+    throw Exception('sing-box не открыл clash_api за 30 с:\n${tailLog()}');
   }
 
   @override

@@ -39,6 +39,7 @@ class VpnProvider extends ChangeNotifier {
   bool _warpActive = false;
   bool _awgMode = false;    // текущее подключение — AWG
   bool _cancelRequested = false;  // пользователь прервал подключение
+  bool _switching = false;        // идёт смена сервера/протокола (disconnect→connect)
   String _awgServerHost = '';
 
   final _pingResults = <String, int?>{};  // profileId → ms, null = недоступен
@@ -86,6 +87,16 @@ class VpnProvider extends ChangeNotifier {
       _vpn = VpnService.create();
       if (Platform.isWindows) await _vpn.cleanup();
       _vpn.statusStream.listen((s) {
+        // при смене сервера/протокола не мигаем серым промежуточным статусом —
+        // держим "подключение", но скорость останавливаем (новый коннект её поднимет)
+        if (_switching &&
+            (s == VpnStatus.disconnecting || s == VpnStatus.disconnected)) {
+          _connectedAt = null;
+          _speed.stop();
+          _status = VpnStatus.connecting;
+          notifyListeners();
+          return;
+        }
         _status = s;
         if (s == VpnStatus.connected) {
           _connectedAt ??= DateTime.now();
@@ -357,8 +368,11 @@ class VpnProvider extends ChangeNotifier {
   Future<void> disconnect() async {
     _warpActive = false;
     _awgMode = false;
-    _status = VpnStatus.disconnecting;
-    notifyListeners();
+    // при переключении статус держим "подключение" (см. _switching), не серый
+    if (!_switching) {
+      _status = VpnStatus.disconnecting;
+      notifyListeners();
+    }
     await _vpn.disconnect();
   }
 
@@ -426,12 +440,20 @@ class VpnProvider extends ChangeNotifier {
     notifyListeners();
     _fetchCountry(profile.serverHost);
     if (wasActive) {
-      // сначала чистое отключение старого (без гонки статусов), затем коннект к новому
-      await disconnect();
-      // пауза на устаканивание маршрутизации/интерфейса перед новым коннектом
-      // (иначе QUIC-протоколы — tuic/hysteria — могут не поднять трафик с первого раза)
-      await Future.delayed(const Duration(milliseconds: 1200));
-      await connect();
+      // на время переключения держим UI в "подключении" (без серой кнопки)
+      _switching = true;
+      _status = VpnStatus.connecting;
+      notifyListeners();
+      try {
+        // сначала чистое отключение старого (без гонки статусов), затем коннект к новому
+        await disconnect();
+        // пауза на устаканивание маршрутизации/интерфейса перед новым коннектом
+        // (иначе QUIC-протоколы — tuic/hysteria — могут не поднять трафик с первого раза)
+        await Future.delayed(const Duration(milliseconds: 1200));
+        await connect();
+      } finally {
+        _switching = false;
+      }
     }
   }
 
