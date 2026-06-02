@@ -555,34 +555,75 @@ class _RoutingModeSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.ac;
+    final active = vpn.bypassApps.isNotEmpty;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-      child: Wrap(
-        spacing: 8,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _ModeChip(
-            label: s.routingFull,
-            selected: vpn.routingMode == RoutingMode.fullVpn,
-            onTap: () => vpn.setRoutingMode(RoutingMode.fullVpn),
+          // взаимоисключающие режимы маршрутизации
+          Wrap(
+            spacing: 8,
+            children: [
+              _ModeChip(
+                label: s.routingFull,
+                selected: vpn.routingMode == RoutingMode.fullVpn,
+                onTap: () => vpn.setRoutingMode(RoutingMode.fullVpn),
+              ),
+              _ModeChip(
+                label: s.routingRussia,
+                selected: vpn.routingMode == RoutingMode.russiaBypass,
+                onTap: () => vpn.setRoutingMode(RoutingMode.russiaBypass),
+              ),
+              _ModeChip(
+                label: s.routingCustom,
+                selected: vpn.routingMode == RoutingMode.custom,
+                onTap: () => vpn.setRoutingMode(RoutingMode.custom),
+              ),
+            ],
           ),
-          _ModeChip(
-            label: s.routingRussia,
-            selected: vpn.routingMode == RoutingMode.russiaBypass,
-            onTap: () => vpn.setRoutingMode(RoutingMode.russiaBypass),
-          ),
-          _ModeChip(
-            label: s.routingCustom,
-            selected: vpn.routingMode == RoutingMode.custom,
-            onTap: () => vpn.setRoutingMode(RoutingMode.custom),
-          ),
-          if (Platform.isWindows)
-            _ModeChip(
-              label: vpn.bypassApps.isEmpty
-                  ? s.splitTunnelChip
-                  : '${s.splitTunnelChip} (${vpn.bypassApps.length})',
-              selected: vpn.bypassApps.isNotEmpty,
-              onTap: () => _openSplitTunnel(context, vpn, s),
+          // split-tunnel — независимый оверлей (поверх любого режима), не «режим»
+          if (Platform.isWindows) ...[
+            const SizedBox(height: 8),
+            MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                onTap: () => _openSplitTunnel(context, vpn, s),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: active ? c.upload.withOpacity(0.12) : c.surface,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: active ? c.upload.withOpacity(0.5) : c.border,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.call_split_rounded,
+                          size: 16, color: active ? c.upload : c.textMuted),
+                      const SizedBox(width: 8),
+                      Text(
+                        active
+                            ? '${s.splitTunnelChip} (${vpn.bypassApps.length})'
+                            : s.splitTunnelChip,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: active ? c.textPrimary : c.textMuted,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Icon(Icons.chevron_right,
+                          size: 16, color: c.textMuted),
+                    ],
+                  ),
+                ),
+              ),
             ),
+          ],
         ],
       ),
     );
