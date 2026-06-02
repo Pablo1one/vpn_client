@@ -53,6 +53,14 @@ class SettingsScreen extends StatelessWidget {
             onChanged: vpn.isConnected ? null : vpn.setMux,
           ),
           SwitchListTile(
+            secondary: Icon(Icons.block_rounded,
+                size: 20, color: context.ac.textMuted),
+            title: Text(s.adblockTitle),
+            subtitle: Text(s.adblockDesc),
+            value: vpn.blockAds,
+            onChanged: vpn.isConnected ? null : vpn.setBlockAds,
+          ),
+          SwitchListTile(
             title: Text(s.allowInsecureTitle),
             subtitle: Text(s.allowInsecureDesc),
             value: vpn.allowInsecure,

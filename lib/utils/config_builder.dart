@@ -41,6 +41,7 @@ class ConfigBuilder {
     bool tfo = false,
     Map<String, dynamic>? warp, // WARP-каскад: выход через Cloudflare поверх сервера
     List<String> bypassApps = const [], // split-tunnel: эти процессы идут напрямую
+    String? adsRuleSet, // путь к geosite-ads .srs (блокировка рекламы), null = выкл
   }) {
     final dnsAddr = dns.trim().isEmpty ? '8.8.8.8' : dns.trim();
     final Map<String, dynamic> outbound = switch (profile.protocol) {
@@ -70,10 +71,12 @@ class ConfigBuilder {
     if (bypassApps.isNotEmpty) {
       rules.add({'process_name': bypassApps, 'outbound': 'direct'});
     }
-    rules.addAll([
-      {'action': 'sniff'},
-      {'action': 'hijack-dns', 'protocol': 'dns'},
-    ]);
+    rules.add({'action': 'sniff'});
+    // блокировка рекламы: режем домены из geosite-ads (после sniff — домен известен)
+    if (adsRuleSet != null) {
+      rules.add({'rule_set': ['geosite-ads'], 'action': 'reject'});
+    }
+    rules.add({'action': 'hijack-dns', 'protocol': 'dns'});
     if (routingMode == RoutingMode.russiaBypass && ruCidrs.isNotEmpty) {
       rules.add({'ip_cidr': ruCidrs, 'outbound': 'direct'});
     }
@@ -131,6 +134,15 @@ class ConfigBuilder {
         'auto_detect_interface': true,
         'final': warp != null ? 'warp' : 'proxy',
         'default_domain_resolver': {'server': 'dns-direct', 'strategy': 'prefer_ipv4'},
+        if (adsRuleSet != null)
+          'rule_set': [
+            {
+              'type': 'local',
+              'tag': 'geosite-ads',
+              'format': 'binary',
+              'path': adsRuleSet,
+            },
+          ],
         'rules': rules,
       },
     };
@@ -144,6 +156,7 @@ class ConfigBuilder {
     List<String> ruCidrs = const [],
     Map<String, dynamic>? warp, // WARP-каскад поверх socks-прокси (нашего сервера)
     List<String> bypassApps = const [], // split-tunnel: эти процессы идут напрямую
+    String? adsRuleSet, // путь к geosite-ads .srs (блокировка рекламы)
   }) {
     final dnsAddr = dns.trim().isEmpty ? '8.8.8.8' : dns.trim();
     return {
@@ -202,6 +215,15 @@ class ConfigBuilder {
           'final': warp != null ? 'warp' : 'proxy',
           // sing-box 1.12: глобальный резолвер доменов (иначе первый резолв буксует → "нет интернета")
           'default_domain_resolver': {'server': 'dns', 'strategy': 'prefer_ipv4'},
+          if (adsRuleSet != null)
+            'rule_set': [
+              {
+                'type': 'local',
+                'tag': 'geosite-ads',
+                'format': 'binary',
+                'path': adsRuleSet,
+              },
+            ],
           'rules': [
             // исключаем только прокси-процессы (от петли). Сам клиент НЕ исключаем —
             // иначе его трафик (в т.ч. регистрация WARP) шёл бы мимо туннеля и в РФ
@@ -220,6 +242,9 @@ class ConfigBuilder {
                 ruCidrs.isNotEmpty)
               {'ip_cidr': ruCidrs, 'outbound': 'direct'},
             {'action': 'sniff'},
+            // блокировка рекламы: режем домены geosite-ads (после sniff)
+            if (adsRuleSet != null)
+              {'rule_set': ['geosite-ads'], 'action': 'reject'},
             {'action': 'hijack-dns', 'protocol': 'dns'},
           ],
         },

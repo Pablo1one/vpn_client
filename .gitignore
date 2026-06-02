@@ -36,6 +36,9 @@ macos/Flutter/
 .env
 *.env
 singbox/
+# собранные инсталляторы живут в GitHub Releases, в репозитории не нужны
+installer_output/
+tool/icon_preview*.png
 assets/bin/sing-box.exe
 assets/bin/xray.exe
 assets/bin/wintun.dll

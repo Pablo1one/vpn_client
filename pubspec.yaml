@@ -38,3 +38,4 @@ flutter:
     - assets/icons/tray.ico
     - assets/data/iplist_ru.txt
     - assets/data/allowed_ips_bypass.txt
+    - assets/data/geosite-ads.srs
