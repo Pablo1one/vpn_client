@@ -45,6 +45,7 @@ class VpnProvider extends ChangeNotifier {
   bool _userWantsConnected = false; // юзер хочет быть на связи (для авто-реконнекта)
   int _subRefreshHours = 12;      // период авто-обновления подписки (0 = выкл)
   Timer? _subTimer;
+  bool _launchOnStartup = false;  // автозапуск с Windows (+ автоконнект при старте)
   String _awgServerHost = '';
 
   final _pingResults = <String, int?>{};  // profileId → ms, null = недоступен
@@ -77,6 +78,7 @@ class VpnProvider extends ChangeNotifier {
   bool get tfo => _tfo;
   bool get warpCascade => _warpCascade;
   int get subRefreshHours => _subRefreshHours;
+  bool get launchOnStartup => _launchOnStartup;
   String? get error => _error;
   DateTime? get connectedAt => _connectedAt;
   bool get isConnected => _status == VpnStatus.connected;
@@ -155,6 +157,7 @@ class VpnProvider extends ChangeNotifier {
     _tfo = prefs.getBool('tfo') ?? false;
     _warpCascade = prefs.getBool('warpCascade') ?? false;
     _subRefreshHours = prefs.getInt('subRefreshHours') ?? 12;
+    if (Platform.isWindows) _launchOnStartup = await _readStartupEnabled();
     _routingMode = RoutingMode.values.firstWhere(
       (m) => m.name == (prefs.getString('routingMode') ?? 'fullVpn'),
       orElse: () => RoutingMode.fullVpn,
@@ -179,6 +182,51 @@ class VpnProvider extends ChangeNotifier {
         _refreshAllSubscriptions();
       }
     }
+
+    // автоконнект при запуске, если включён автозапуск и есть активный профиль
+    if (_launchOnStartup && _activeProfile != null && _status == VpnStatus.disconnected) {
+      Future.delayed(const Duration(milliseconds: 800), () {
+        if (_status == VpnStatus.disconnected) connect();
+      });
+    }
+  }
+
+  // ── Автозапуск с Windows (ключ HKCU\...\Run) ──────────────────────────────
+  static const _runKey =
+      r'HKCU\Software\Microsoft\Windows\CurrentVersion\Run';
+  static const _runValue = 'LightningMcQueen';
+
+  Future<bool> _readStartupEnabled() async {
+    try {
+      final r = await Process.run(
+        'reg', ['query', _runKey, '/v', _runValue],
+        runInShell: false,
+      );
+      return r.exitCode == 0;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> setLaunchOnStartup(bool value) async {
+    _launchOnStartup = value;
+    notifyListeners();
+    if (!Platform.isWindows) return;
+    try {
+      if (value) {
+        final exe = Platform.resolvedExecutable;
+        await Process.run(
+          'reg',
+          ['add', _runKey, '/v', _runValue, '/t', 'REG_SZ', '/d', '"$exe"', '/f'],
+          runInShell: false,
+        );
+      } else {
+        await Process.run(
+          'reg', ['delete', _runKey, '/v', _runValue, '/f'],
+          runInShell: false,
+        );
+      }
+    } catch (_) {}
   }
 
   // ── Авто-реконнект и авто-обновление подписки ─────────────────────────────
