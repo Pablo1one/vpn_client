@@ -40,6 +40,7 @@ class ConfigBuilder {
     bool allowInsecure = false,
     bool tfo = false,
     Map<String, dynamic>? warp, // WARP-каскад: выход через Cloudflare поверх сервера
+    List<String> bypassApps = const [], // split-tunnel: эти процессы идут напрямую
   }) {
     final dnsAddr = dns.trim().isEmpty ? '8.8.8.8' : dns.trim();
     final Map<String, dynamic> outbound = switch (profile.protocol) {
@@ -64,6 +65,10 @@ class ConfigBuilder {
         if (isIp) 'ip_cidr': [serverAddress] else 'domain': [serverAddress],
         'outbound': 'direct',
       });
+    }
+    // split-tunnel: выбранные приложения мимо VPN (напрямую)
+    if (bypassApps.isNotEmpty) {
+      rules.add({'process_name': bypassApps, 'outbound': 'direct'});
     }
     rules.addAll([
       {'action': 'sniff'},
@@ -138,6 +143,7 @@ class ConfigBuilder {
     String dns = '8.8.8.8',
     List<String> ruCidrs = const [],
     Map<String, dynamic>? warp, // WARP-каскад поверх socks-прокси (нашего сервера)
+    List<String> bypassApps = const [], // split-tunnel: эти процессы идут напрямую
   }) {
     final dnsAddr = dns.trim().isEmpty ? '8.8.8.8' : dns.trim();
     return {
@@ -204,6 +210,9 @@ class ConfigBuilder {
               'process_name': ['xray.exe', 'sing-box.exe'],
               'outbound': 'direct',
             },
+            // split-tunnel: выбранные приложения мимо VPN (напрямую)
+            if (bypassApps.isNotEmpty)
+              {'process_name': bypassApps, 'outbound': 'direct'},
             // в каскаде приватное и (при bypass) российское — мимо WARP, напрямую
             if (warp != null) {'ip_is_private': true, 'outbound': 'direct'},
             if (warp != null &&

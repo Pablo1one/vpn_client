@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -26,6 +27,7 @@ class VpnProvider extends ChangeNotifier {
   RoutingMode _routingMode = RoutingMode.fullVpn;
   List<String> _bypassDomains = [];
   List<String> _excludedApps = [];
+  List<String> _bypassApps = []; // split-tunnel Windows: процессы мимо VPN
   bool _mux = false;        // мультиплексирование
   bool _fragment = false;   // TLS-фрагментация (обход DPI)
   // параметры фрагментации (дефолты — текущие зашитые значения)
@@ -66,6 +68,7 @@ class VpnProvider extends ChangeNotifier {
   RoutingMode get routingMode => _routingMode;
   List<String> get bypassDomains => List.from(_bypassDomains);
   List<String> get excludedApps => List.from(_excludedApps);
+  List<String> get bypassApps => List.from(_bypassApps);
   bool get mux => _mux;
   bool get fragment => _fragment;
   String get fragPackets => _fragPackets;
@@ -145,6 +148,7 @@ class VpnProvider extends ChangeNotifier {
     _killSwitch = prefs.getBool('killSwitch') ?? false;
     _bypassDomains = prefs.getStringList('bypassDomains') ?? [];
     _excludedApps = prefs.getStringList('excludedApps') ?? [];
+    _bypassApps = prefs.getStringList('bypassApps') ?? [];
     _mux = prefs.getBool('mux') ?? false;
     _fragment = prefs.getBool('fragment') ?? false;
     _fragPackets = prefs.getString('fragPackets') ?? 'tlshello';
@@ -369,6 +373,7 @@ class VpnProvider extends ChangeNotifier {
           allowInsecure: _allowInsecure,
           tfo: _tfo,
           warp: warpJson,
+          bypassApps: _bypassApps,
         );
         await _vpn.connect(ConfigBuilder.toJson(config));
       } else {
@@ -391,6 +396,7 @@ class VpnProvider extends ChangeNotifier {
           dns: _dns,
           ruCidrs: ruCidrs,
           warp: warpJson,
+          bypassApps: _bypassApps,
         );
         await _vpn.connectProxy(
           xrayConfigJson: xrayJson,
@@ -419,6 +425,7 @@ class VpnProvider extends ChangeNotifier {
         dns: _dns,
         ruCidrs: ruCidrs,
         warp: warpJson,
+        bypassApps: _bypassApps,
       );
       await _vpn.connectProxy(
         singboxConfigJson: ConfigBuilder.toJson(proxyConfig),
@@ -436,6 +443,7 @@ class VpnProvider extends ChangeNotifier {
         allowInsecure: _allowInsecure,
         tfo: _tfo,
         warp: warpJson,
+        bypassApps: _bypassApps,
       );
       await _vpn.connect(
         ConfigBuilder.toJson(config),
@@ -729,6 +737,13 @@ class VpnProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setBypassApps(List<String> apps) async {
+    _bypassApps = apps;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('bypassApps', apps);
+    notifyListeners();
+  }
+
   Future<void> setExcludedApps(List<String> apps) async {
     _excludedApps = apps;
     final prefs = await SharedPreferences.getInstance();
@@ -828,6 +843,50 @@ class VpnProvider extends ChangeNotifier {
       return _cachedBypassAllowedIps!;
     } catch (e) {
       debugPrint('allowed_ips_bypass load error: $e');
+      return [];
+    }
+  }
+
+  // Запущенные процессы Windows для split-tunnel: [{package: exe, name: ярлык}]
+  // (ключ 'package' — чтобы переиспользовать существующий пикер приложений)
+  Future<List<Map<String, String>>> getRunningProcesses() async {
+    if (!Platform.isWindows) return [];
+    try {
+      final r = await Process.run(
+        'powershell',
+        [
+          '-NoProfile',
+          '-Command',
+          // OutputEncoding=UTF8 + читаем сырые байты → корректная кириллица в именах
+          r'[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Get-Process | Where-Object {$_.Path} | Select-Object ProcessName,Description | ConvertTo-Json -Compress',
+        ],
+        runInShell: false,
+        stdoutEncoding: null, // сырые байты, декодируем сами как UTF-8
+      );
+      if (r.exitCode != 0) return [];
+      final out =
+          utf8.decode(r.stdout as List<int>, allowMalformed: true).trim();
+      if (out.isEmpty) return [];
+      final decoded = jsonDecode(out);
+      final list = decoded is List ? decoded : [decoded];
+      final seen = <String>{};
+      final result = <Map<String, String>>[];
+      for (final e in list) {
+        final pn = (e['ProcessName'] as String?)?.trim() ?? '';
+        if (pn.isEmpty) continue;
+        final exe = '$pn.exe';
+        if (!seen.add(exe.toLowerCase())) continue;
+        final desc = (e['Description'] as String?)?.trim();
+        result.add({
+          'package': exe,
+          'name': (desc != null && desc.isNotEmpty) ? desc : pn,
+        });
+      }
+      result.sort((a, b) =>
+          a['name']!.toLowerCase().compareTo(b['name']!.toLowerCase()));
+      return result;
+    } catch (e) {
+      debugPrint('getRunningProcesses error: $e');
       return [];
     }
   }

@@ -36,6 +36,10 @@ class L10n {
   final String subRefreshOff;
   final String autostartTitle;
   final String autostartDesc;
+  final String splitTunnelTitle;
+  final String splitTunnelDesc;
+  final String splitTunnelHint;
+  final String splitTunnelChip;
   final String coresTitle;
   final String routing;
   final String routingFull;
@@ -131,6 +135,10 @@ class L10n {
     required this.subRefreshOff,
     required this.autostartTitle,
     required this.autostartDesc,
+    required this.splitTunnelTitle,
+    required this.splitTunnelDesc,
+    required this.splitTunnelHint,
+    required this.splitTunnelChip,
     required this.coresTitle,
     required this.routing,
     required this.routingFull,
@@ -234,6 +242,10 @@ class L10n {
     subRefreshOff: 'Off',
     autostartTitle: 'Launch at Windows startup',
     autostartDesc: 'Start with Windows and auto-connect the last profile',
+    splitTunnelTitle: 'Split tunnel (apps bypass VPN)',
+    splitTunnelDesc: 'These apps go direct, outside the VPN',
+    splitTunnelHint: 'One process per line, e.g.\nDiscord.exe\nchrome.exe',
+    splitTunnelChip: 'Apps bypass VPN',
     coresTitle: 'Cores & versions',
     routing: 'Routing',
     routingFull: 'Full VPN',
@@ -329,6 +341,10 @@ class L10n {
     subRefreshOff: 'Выкл',
     autostartTitle: 'Запуск с Windows',
     autostartDesc: 'Запускать со стартом Windows и автоподключать последний профиль',
+    splitTunnelTitle: 'Split-tunnel (приложения мимо VPN)',
+    splitTunnelDesc: 'Указанные приложения идут напрямую, минуя VPN',
+    splitTunnelHint: 'По одному процессу в строке, напр.\nDiscord.exe\nchrome.exe',
+    splitTunnelChip: 'Приложения мимо VPN',
     coresTitle: 'Ядра и версии',
     killSwitch: 'Kill Switch',
     killSwitchDesc: 'Блокировать трафик при разрыве VPN',

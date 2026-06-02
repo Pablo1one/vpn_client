@@ -575,9 +575,39 @@ class _RoutingModeSelector extends StatelessWidget {
             selected: vpn.routingMode == RoutingMode.custom,
             onTap: () => vpn.setRoutingMode(RoutingMode.custom),
           ),
+          if (Platform.isWindows)
+            _ModeChip(
+              label: vpn.bypassApps.isEmpty
+                  ? s.splitTunnelChip
+                  : '${s.splitTunnelChip} (${vpn.bypassApps.length})',
+              selected: vpn.bypassApps.isNotEmpty,
+              onTap: () => _openSplitTunnel(context, vpn, s),
+            ),
         ],
       ),
     );
+  }
+
+  Future<void> _openSplitTunnel(
+      BuildContext context, VpnProvider vpn, L10n s) async {
+    final result = await showModalBottomSheet<List<String>>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _AppPickerSheet(
+        excluded: vpn.bypassApps,
+        s: s,
+        loadApps: () async {
+          final procs = await vpn.getRunningProcesses();
+          final have = procs.map((m) => m['package']).toSet();
+          // показать уже выбранные процессы, даже если сейчас не запущены
+          for (final exe in vpn.bypassApps) {
+            if (!have.contains(exe)) procs.add({'package': exe, 'name': exe});
+          }
+          return procs;
+        },
+      ),
+    );
+    if (result != null) vpn.setBypassApps(result);
   }
 }
 
