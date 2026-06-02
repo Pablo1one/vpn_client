@@ -34,6 +34,7 @@ class VpnProvider extends ChangeNotifier {
   String _dns = '';         // кастомный DNS (пусто = дефолт 8.8.8.8)
   bool _allowInsecure = false; // принимать недоверенные TLS-сертификаты
   bool _tfo = false;           // TCP Fast Open
+  bool _warpCascade = false;   // выход через Cloudflare WARP поверх нашего сервера
   String? _error;
 
   bool _warpActive = false;
@@ -70,6 +71,7 @@ class VpnProvider extends ChangeNotifier {
   String get dns => _dns;
   bool get allowInsecure => _allowInsecure;
   bool get tfo => _tfo;
+  bool get warpCascade => _warpCascade;
   String? get error => _error;
   DateTime? get connectedAt => _connectedAt;
   bool get isConnected => _status == VpnStatus.connected;
@@ -136,6 +138,7 @@ class VpnProvider extends ChangeNotifier {
     _dns = prefs.getString('dns') ?? '';
     _allowInsecure = prefs.getBool('allowInsecure') ?? false;
     _tfo = prefs.getBool('tfo') ?? false;
+    _warpCascade = prefs.getBool('warpCascade') ?? false;
     _routingMode = RoutingMode.values.firstWhere(
       (m) => m.name == (prefs.getString('routingMode') ?? 'fullVpn'),
       orElse: () => RoutingMode.fullVpn,
@@ -163,104 +166,41 @@ class VpnProvider extends ChangeNotifier {
     try {
       final profile = _activeProfile!;
 
-      if (profile.protocol == VpnProtocol.amnezia && Platform.isWindows) {
-        _awgMode = true;
-        _awgServerHost = profile.serverHost;
-        List<String>? bypassIps;
-        if (_routingMode == RoutingMode.russiaBypass) {
-          bypassIps = await _loadBypassAllowedIps();
+      // WARP-каскад (opt-in): выход через Cloudflare поверх нашего сервера.
+      // Для AWG не поддерживается (системный WG). Когда выключен — обычный коннект.
+      Map<String, dynamic>? warpJson;
+      bool twoPhase = false;
+      final wantWarp = _warpCascade &&
+          Platform.isWindows &&
+          profile.protocol != VpnProtocol.amnezia;
+      if (wantWarp) {
+        var warp = await WarpService.loadSaved();
+        // нет конфига ИЛИ старый без reserved (client_id) — нужна регистрация
+        if (warp == null || warp.reserved == null) {
+          // Cloudflare API в РФ заблокирован → регистрируемся ЧЕРЕЗ туннель:
+          // фаза 1 — поднять сервер без WARP, затем register по живому туннелю.
+          twoPhase = true;
+          _switching = true; // держим UI в "подключении" на обе фазы
+          try {
+            await _connectInternal(profile, warpJson: null);
+            await Future.delayed(const Duration(milliseconds: 900));
+            warp = await WarpService.register();
+          } catch (e) {
+            _switching = false;
+            await disconnect(); // снести фазу 1, чтобы не висел туннель с ошибкой
+            rethrow;
+          }
         }
-        final conf = ConfigBuilder.buildAwgConf(
-          profile,
-          bypassAllowedIps: bypassIps,
-        );
-        await _vpn.connectAwg(conf);
-      } else if (Platform.isWindows && profile.protocol == VpnProtocol.vless) {
-        final transport = (profile.config['transport'] as String? ?? 'tcp').trim();
-        final ruCidrs = _routingMode == RoutingMode.russiaBypass
-            ? await _loadRuCidrs()
-            : <String>[];
-        if (transport == 'grpc') {
-          // gRPC через sing-box TUN: xray 26.x deprecated gRPC — REFUSED_STREAM
-          final config = ConfigBuilder.build(
-            profile,
-            routingMode: _routingMode,
-            killSwitch: _killSwitch,
-            bypassDomains: _bypassDomains,
-            ruCidrs: ruCidrs,
-            mux: _mux,
-            dns: _dns,
-            allowInsecure: _allowInsecure,
-            tfo: _tfo,
-          );
-          await _vpn.connect(ConfigBuilder.toJson(config));
-        } else {
-          // tcp, ws, xhttp, httpupgrade через xray
-          final xrayJson = ConfigBuilder.buildXrayVless(
-            profile,
-            routingMode: _routingMode,
-            ruCidrs: ruCidrs,
-            mux: _mux,
-            fragment: _fragment,
-            fragPackets: _fragPackets,
-            fragLength: '$_fragLenMin-$_fragLenMax',
-            fragInterval: '$_fragIntMin-$_fragIntMax',
-            allowInsecure: _allowInsecure,
-            tfo: _tfo,
-          );
-          final tunConfig = ConfigBuilder.buildTun(
-            killSwitch: _killSwitch,
-            routingMode: _routingMode,
-            dns: _dns,
-          );
-          await _vpn.connectProxy(
-            xrayConfigJson: xrayJson,
-            tunConfigJson: ConfigBuilder.toJson(tunConfig),
-          );
-        }
-      } else if (Platform.isWindows &&
-          (profile.protocol == VpnProtocol.tuic ||
-              profile.protocol == VpnProtocol.hysteria2)) {
-        // TUIC / H2 — sing-box proxy on :10808 + TUN sing-box forwarder
-        final ruCidrs = _routingMode == RoutingMode.russiaBypass
-            ? await _loadRuCidrs()
-            : <String>[];
-        final proxyConfig = ConfigBuilder.buildSingboxProxy(
-          profile,
-          routingMode: _routingMode,
-          ruCidrs: ruCidrs,
-          mux: _mux,
-          dns: _dns,
-          allowInsecure: _allowInsecure,
-          tfo: _tfo,
-        );
-        final tunConfig = ConfigBuilder.buildTun(
-          killSwitch: _killSwitch,
-          routingMode: _routingMode,
-          dns: _dns,
-        );
-        await _vpn.connectProxy(
-          singboxConfigJson: ConfigBuilder.toJson(proxyConfig),
-          tunConfigJson: ConfigBuilder.toJson(tunConfig),
-        );
-      } else {
-        // Mobile (and any other platform): single sing-box with full config
-        final config = ConfigBuilder.build(
-          profile,
-          routingMode: _routingMode,
-          killSwitch: _killSwitch,
-          bypassDomains: _bypassDomains,
-          mux: _mux,
-          dns: _dns,
-          allowInsecure: _allowInsecure,
-          tfo: _tfo,
-        );
-        await _vpn.connect(
-          ConfigBuilder.toJson(config),
-          excludedApps: _excludedApps,
-        );
+        warpJson = warp.toJson();
       }
+
+      // фаза 2 (или обычный единственный коннект)
+      await _connectInternal(profile, warpJson: warpJson);
+      if (twoPhase) _switching = false;
+      _warpActive = warpJson != null;
+      notifyListeners();
     } catch (e) {
+      _switching = false;
       // отмена пользователем в процессе подключения — не показываем ошибку
       if (_cancelRequested) {
         _cancelRequested = false;
@@ -269,6 +209,113 @@ class VpnProvider extends ChangeNotifier {
       _status = VpnStatus.error;
       _error = e.toString().replaceFirst('UnimplementedError: ', '');
       notifyListeners();
+    }
+  }
+
+  // Собственно подключение по протоколу. warpJson != null → WARP-каскад.
+  Future<void> _connectInternal(
+    VpnProfile profile, {
+    Map<String, dynamic>? warpJson,
+  }) async {
+    if (profile.protocol == VpnProtocol.amnezia && Platform.isWindows) {
+      _awgMode = true;
+      _awgServerHost = profile.serverHost;
+      List<String>? bypassIps;
+      if (_routingMode == RoutingMode.russiaBypass) {
+        bypassIps = await _loadBypassAllowedIps();
+      }
+      final conf = ConfigBuilder.buildAwgConf(profile, bypassAllowedIps: bypassIps);
+      await _vpn.connectAwg(conf);
+    } else if (Platform.isWindows && profile.protocol == VpnProtocol.vless) {
+      final transport = (profile.config['transport'] as String? ?? 'tcp').trim();
+      final ruCidrs = _routingMode == RoutingMode.russiaBypass
+          ? await _loadRuCidrs()
+          : <String>[];
+      if (transport == 'grpc') {
+        // gRPC через sing-box TUN: xray 26.x deprecated gRPC — REFUSED_STREAM
+        final config = ConfigBuilder.build(
+          profile,
+          routingMode: _routingMode,
+          killSwitch: _killSwitch,
+          bypassDomains: _bypassDomains,
+          ruCidrs: ruCidrs,
+          mux: _mux,
+          dns: _dns,
+          allowInsecure: _allowInsecure,
+          tfo: _tfo,
+          warp: warpJson,
+        );
+        await _vpn.connect(ConfigBuilder.toJson(config));
+      } else {
+        // tcp, ws, xhttp, httpupgrade через xray
+        final xrayJson = ConfigBuilder.buildXrayVless(
+          profile,
+          routingMode: _routingMode,
+          ruCidrs: ruCidrs,
+          mux: _mux,
+          fragment: _fragment,
+          fragPackets: _fragPackets,
+          fragLength: '$_fragLenMin-$_fragLenMax',
+          fragInterval: '$_fragIntMin-$_fragIntMax',
+          allowInsecure: _allowInsecure,
+          tfo: _tfo,
+        );
+        final tunConfig = ConfigBuilder.buildTun(
+          killSwitch: _killSwitch,
+          routingMode: _routingMode,
+          dns: _dns,
+          ruCidrs: ruCidrs,
+          warp: warpJson,
+        );
+        await _vpn.connectProxy(
+          xrayConfigJson: xrayJson,
+          tunConfigJson: ConfigBuilder.toJson(tunConfig),
+        );
+      }
+    } else if (Platform.isWindows &&
+        (profile.protocol == VpnProtocol.tuic ||
+            profile.protocol == VpnProtocol.hysteria2)) {
+      // TUIC / H2 — sing-box proxy on :10808 + TUN sing-box forwarder
+      final ruCidrs = _routingMode == RoutingMode.russiaBypass
+          ? await _loadRuCidrs()
+          : <String>[];
+      final proxyConfig = ConfigBuilder.buildSingboxProxy(
+        profile,
+        routingMode: _routingMode,
+        ruCidrs: ruCidrs,
+        mux: _mux,
+        dns: _dns,
+        allowInsecure: _allowInsecure,
+        tfo: _tfo,
+      );
+      final tunConfig = ConfigBuilder.buildTun(
+        killSwitch: _killSwitch,
+        routingMode: _routingMode,
+        dns: _dns,
+        ruCidrs: ruCidrs,
+        warp: warpJson,
+      );
+      await _vpn.connectProxy(
+        singboxConfigJson: ConfigBuilder.toJson(proxyConfig),
+        tunConfigJson: ConfigBuilder.toJson(tunConfig),
+      );
+    } else {
+      // Mobile (and any other platform): single sing-box with full config
+      final config = ConfigBuilder.build(
+        profile,
+        routingMode: _routingMode,
+        killSwitch: _killSwitch,
+        bypassDomains: _bypassDomains,
+        mux: _mux,
+        dns: _dns,
+        allowInsecure: _allowInsecure,
+        tfo: _tfo,
+        warp: warpJson,
+      );
+      await _vpn.connect(
+        ConfigBuilder.toJson(config),
+        excludedApps: _excludedApps,
+      );
     }
   }
 
@@ -594,6 +641,13 @@ class VpnProvider extends ChangeNotifier {
     _tfo = value;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('tfo', value);
+    notifyListeners();
+  }
+
+  Future<void> setWarpCascade(bool value) async {
+    _warpCascade = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('warpCascade', value);
     notifyListeners();
   }
 

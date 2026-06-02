@@ -12,12 +12,16 @@ class WarpConfig {
   final String address;
   final String endpoint;
   final String publicKey;
+  // 3 байта client_id Cloudflare — обязательны для маршрутизации трафика WARP
+  // (без них рукопожатие проходит, но загрузка не идёт).
+  final List<int>? reserved;
 
   const WarpConfig({
     required this.privateKey,
     required this.address,
     required this.endpoint,
     required this.publicKey,
+    this.reserved,
   });
 
   Map<String, dynamic> toJson() => {
@@ -25,6 +29,7 @@ class WarpConfig {
         'address': address,
         'endpoint': endpoint,
         'publicKey': publicKey,
+        if (reserved != null) 'reserved': reserved,
       };
 
   factory WarpConfig.fromJson(Map<String, dynamic> j) => WarpConfig(
@@ -32,6 +37,7 @@ class WarpConfig {
         address: j['address'] as String,
         endpoint: j['endpoint'] as String,
         publicKey: j['publicKey'] as String,
+        reserved: (j['reserved'] as List?)?.map((e) => e as int).toList(),
       );
 
   String toWgConf() => '''[Interface]
@@ -166,13 +172,29 @@ class WarpService {
 
         final address = (iface['addresses'] as Map<String, dynamic>)['v4'] as String;
         final peerPub = peer['public_key'] as String;
-        final endpoint = (peer['endpoint'] as Map<String, dynamic>)['v4'] as String;
+        // v4 приходит с портом-заглушкой :0 — нормализуем к стандартному WARP 2408
+        final epRaw = (peer['endpoint'] as Map<String, dynamic>)['v4'] as String;
+        final epCi = epRaw.lastIndexOf(':');
+        final epIp = epCi >= 0 ? epRaw.substring(0, epCi) : epRaw;
+        final epPort = epCi >= 0 ? (int.tryParse(epRaw.substring(epCi + 1)) ?? 0) : 0;
+        final endpoint = '$epIp:${epPort > 0 ? epPort : 2408}';
+
+        // client_id → reserved (3 байта), нужен Cloudflare для маршрутизации
+        List<int>? reserved;
+        final clientId = config['client_id'] as String?;
+        if (clientId != null && clientId.isNotEmpty) {
+          try {
+            final bytes = base64.decode(clientId);
+            if (bytes.length >= 3) reserved = [bytes[0], bytes[1], bytes[2]];
+          } catch (_) {}
+        }
 
         final warpConfig = WarpConfig(
           privateKey: privateKey,
           address: '$address/32',
           endpoint: endpoint,
           publicKey: peerPub,
+          reserved: reserved,
         );
         await _save(warpConfig);
         LogService().add('[warp] registered via $base, endpoint=$endpoint');
