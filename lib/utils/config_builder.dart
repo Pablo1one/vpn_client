@@ -39,7 +39,6 @@ class ConfigBuilder {
     String dns = '8.8.8.8',
     bool allowInsecure = false,
     bool tfo = false,
-    bool ipv6 = false,
   }) {
     final dnsAddr = dns.trim().isEmpty ? '8.8.8.8' : dns.trim();
     final Map<String, dynamic> outbound = switch (profile.protocol) {
@@ -100,10 +99,10 @@ class ConfigBuilder {
           'type': 'tun',
           'tag': 'tun-in',
           'interface_name': 'tun0',
-          // IPv4 всегда; IPv6 — только если включён в системе (иначе на TUN
-          // падает "set ipv6 address: Element not found"). Без захвата IPv6 был
-          // бы leak: трафик к AAAA-хостам уходил бы мимо туннеля.
-          'address': ['172.19.0.1/30', if (ipv6) 'fdfe:dcba:9876::1/126'],
+          // Только IPv4. Захват IPv6 в TUN при отсутствии реального IPv6-егресса
+          // (частый случай на Windows: есть ULA/temporary адрес, но нет маршрута)
+          // ломает всё с AAAA → "network is unreachable". Пусть IPv6 идёт мимо.
+          'address': ['172.19.0.1/30'],
           'mtu': 1400,
           'auto_route': true,
           'strict_route': killSwitch,
@@ -131,7 +130,6 @@ class ConfigBuilder {
     bool killSwitch = false,
     RoutingMode routingMode = RoutingMode.fullVpn,
     String dns = '8.8.8.8',
-    bool ipv6 = false,
   }) {
     final dnsAddr = dns.trim().isEmpty ? '8.8.8.8' : dns.trim();
     return {
@@ -156,10 +154,12 @@ class ConfigBuilder {
             'type': 'tun',
             'tag': 'tun-in',
             'interface_name': 'tun0',
-            'address': ['172.19.0.1/30', if (ipv6) 'fdfe:dcba:9876::1/126'],
+            'address': ['172.19.0.1/30'],
             'mtu': 1400,
             'auto_route': true,
-            'strict_route': true,
+            // strict_route только при kill switch: иначе на Windows он ломает
+            // раздельную маршрутизацию (bypass) и обход, как заметно против Happ
+            'strict_route': killSwitch,
             'stack': 'mixed',
           },
         ],
