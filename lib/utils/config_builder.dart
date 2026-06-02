@@ -104,7 +104,9 @@ class ConfigBuilder {
           // (частый случай на Windows: есть ULA/temporary адрес, но нет маршрута)
           // ломает всё с AAAA → "network is unreachable". Пусть IPv6 идёт мимо.
           'address': ['172.19.0.1/30'],
-          'mtu': 1400,
+          // в WARP-каскаде MTU ниже: app-пакеты должны влезать в WG WARP (1280)
+          // без фрагментации, иначе download проседает
+          'mtu': warp != null ? 1280 : 1400,
           'auto_route': true,
           'strict_route': killSwitch,
           'stack': 'mixed',
@@ -161,7 +163,8 @@ class ConfigBuilder {
             'tag': 'tun-in',
             'interface_name': 'tun0',
             'address': ['172.19.0.1/30'],
-            'mtu': 1400,
+            // в WARP-каскаде MTU ниже (app-пакеты должны влезать в WG WARP)
+            'mtu': warp != null ? 1280 : 1400,
             'auto_route': true,
             // strict_route только при kill switch: иначе на Windows он ломает
             // раздельную маршрутизацию (bypass) и обход, как заметно против Happ

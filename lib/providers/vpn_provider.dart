@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/profile.dart';
+import '../services/log_service.dart';
 import '../services/profile_repository.dart';
 import '../services/speed_service.dart';
 import '../services/vpn_service.dart';
@@ -41,6 +42,9 @@ class VpnProvider extends ChangeNotifier {
   bool _awgMode = false;    // текущее подключение — AWG
   bool _cancelRequested = false;  // пользователь прервал подключение
   bool _switching = false;        // идёт смена сервера/протокола (disconnect→connect)
+  bool _userWantsConnected = false; // юзер хочет быть на связи (для авто-реконнекта)
+  int _subRefreshHours = 12;      // период авто-обновления подписки (0 = выкл)
+  Timer? _subTimer;
   String _awgServerHost = '';
 
   final _pingResults = <String, int?>{};  // profileId → ms, null = недоступен
@@ -72,6 +76,7 @@ class VpnProvider extends ChangeNotifier {
   bool get allowInsecure => _allowInsecure;
   bool get tfo => _tfo;
   bool get warpCascade => _warpCascade;
+  int get subRefreshHours => _subRefreshHours;
   String? get error => _error;
   DateTime? get connectedAt => _connectedAt;
   bool get isConnected => _status == VpnStatus.connected;
@@ -99,6 +104,9 @@ class VpnProvider extends ChangeNotifier {
           notifyListeners();
           return;
         }
+        // неожиданный обрыв (был connected → стал disconnected, а юзер хочет связь)
+        // → авто-переподключение
+        final wasConnected = _status == VpnStatus.connected;
         _status = s;
         if (s == VpnStatus.connected) {
           _connectedAt ??= DateTime.now();
@@ -113,6 +121,13 @@ class VpnProvider extends ChangeNotifier {
         } else {
           _connectedAt = null;
           _speed.stop();
+          if (s == VpnStatus.disconnected &&
+              wasConnected &&
+              _userWantsConnected &&
+              !_switching) {
+            _scheduleReconnect();
+            return; // _scheduleReconnect уже выставил статус и уведомил
+          }
         }
         if (s != VpnStatus.error) _error = null;
         notifyListeners();
@@ -139,6 +154,7 @@ class VpnProvider extends ChangeNotifier {
     _allowInsecure = prefs.getBool('allowInsecure') ?? false;
     _tfo = prefs.getBool('tfo') ?? false;
     _warpCascade = prefs.getBool('warpCascade') ?? false;
+    _subRefreshHours = prefs.getInt('subRefreshHours') ?? 12;
     _routingMode = RoutingMode.values.firstWhere(
       (m) => m.name == (prefs.getString('routingMode') ?? 'fullVpn'),
       orElse: () => RoutingMode.fullVpn,
@@ -152,10 +168,71 @@ class VpnProvider extends ChangeNotifier {
       } catch (_) {}
     }
     notifyListeners();
+
+    // авто-обновление подписки: периодический таймер + догон при запуске,
+    // если с прошлого обновления прошло больше интервала
+    _setupSubRefresh();
+    if (_subRefreshHours > 0) {
+      final last = prefs.getInt('lastSubRefresh') ?? 0;
+      final dueMs = _subRefreshHours * 3600 * 1000;
+      if (DateTime.now().millisecondsSinceEpoch - last >= dueMs) {
+        _refreshAllSubscriptions();
+      }
+    }
+  }
+
+  // ── Авто-реконнект и авто-обновление подписки ─────────────────────────────
+
+  void _scheduleReconnect() {
+    _status = VpnStatus.connecting; // показываем "переподключение"
+    notifyListeners();
+    LogService().add('[reconnect] туннель упал — авто-переподключение через 3 с');
+    Future.delayed(const Duration(seconds: 3), () {
+      if (_userWantsConnected &&
+          _status != VpnStatus.connected &&
+          _activeProfile != null) {
+        connect();
+      }
+    });
+  }
+
+  void _setupSubRefresh() {
+    _subTimer?.cancel();
+    _subTimer = null;
+    if (_subRefreshHours > 0) {
+      _subTimer = Timer.periodic(
+        Duration(hours: _subRefreshHours),
+        (_) => _refreshAllSubscriptions(),
+      );
+    }
+  }
+
+  Future<void> _refreshAllSubscriptions() async {
+    final urls = _profiles
+        .map((p) => p.subscriptionUrl)
+        .whereType<String>()
+        .toSet();
+    if (urls.isEmpty) return;
+    for (final url in urls) {
+      try {
+        await refreshSubscription(url);
+      } catch (_) {}
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('lastSubRefresh', DateTime.now().millisecondsSinceEpoch);
+  }
+
+  Future<void> setSubRefreshHours(int hours) async {
+    _subRefreshHours = hours;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('subRefreshHours', hours);
+    _setupSubRefresh();
+    notifyListeners();
   }
 
   Future<void> connect() async {
     if (_activeProfile == null) return;
+    _userWantsConnected = true; // для авто-реконнекта при обрыве
     _error = null;
     _warpActive = false;
     _awgMode = false;
@@ -322,6 +399,7 @@ class VpnProvider extends ChangeNotifier {
   // Прерывание подключения в процессе (пользователь нажал отмену)
   Future<void> cancelConnect() async {
     _cancelRequested = true;
+    _userWantsConnected = false; // отмена пользователем — не реконнектим
     _warpActive = false;
     _awgMode = false;
     _status = VpnStatus.disconnecting;
@@ -413,6 +491,7 @@ class VpnProvider extends ChangeNotifier {
   }
 
   Future<void> disconnect() async {
+    if (!_switching) _userWantsConnected = false; // ручной дисконнект — не реконнектим
     _warpActive = false;
     _awgMode = false;
     // при переключении статус держим "подключение" (см. _switching), не серый
@@ -726,6 +805,7 @@ class VpnProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _subTimer?.cancel();
     _speed.dispose();
     _vpn.dispose();
     super.dispose();
