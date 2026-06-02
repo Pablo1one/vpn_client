@@ -21,7 +21,7 @@ class VpnProvider extends ChangeNotifier {
   DateTime? _connectedAt;
   VpnProfile? _activeProfile;
   List<VpnProfile> _profiles = [];
-  bool _killSwitch = true;
+  bool _killSwitch = false;
   RoutingMode _routingMode = RoutingMode.fullVpn;
   List<String> _bypassDomains = [];
   List<String> _excludedApps = [];
@@ -112,7 +112,7 @@ class VpnProvider extends ChangeNotifier {
     _profiles = _repo.getAll().toList();
 
     final prefs = await SharedPreferences.getInstance();
-    _killSwitch = prefs.getBool('killSwitch') ?? true;
+    _killSwitch = prefs.getBool('killSwitch') ?? false;
     _bypassDomains = prefs.getStringList('bypassDomains') ?? [];
     _excludedApps = prefs.getStringList('excludedApps') ?? [];
     _mux = prefs.getBool('mux') ?? false;
@@ -151,9 +151,6 @@ class VpnProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final profile = _activeProfile!;
-      // IPv6 заворачиваем в туннель только если он реально включён в системе —
-      // иначе sing-box падает с "set ipv6 address". При выключенном IPv6 утечки нет.
-      final ipv6 = await _ipv6Available();
 
       if (profile.protocol == VpnProtocol.amnezia && Platform.isWindows) {
         _awgMode = true;
@@ -184,7 +181,6 @@ class VpnProvider extends ChangeNotifier {
             dns: _dns,
             allowInsecure: _allowInsecure,
             tfo: _tfo,
-            ipv6: ipv6,
           );
           await _vpn.connect(ConfigBuilder.toJson(config));
         } else {
@@ -205,7 +201,6 @@ class VpnProvider extends ChangeNotifier {
             killSwitch: _killSwitch,
             routingMode: _routingMode,
             dns: _dns,
-            ipv6: ipv6,
           );
           await _vpn.connectProxy(
             xrayConfigJson: xrayJson,
@@ -232,7 +227,6 @@ class VpnProvider extends ChangeNotifier {
           killSwitch: _killSwitch,
           routingMode: _routingMode,
           dns: _dns,
-          ipv6: ipv6,
         );
         await _vpn.connectProxy(
           singboxConfigJson: ConfigBuilder.toJson(proxyConfig),
@@ -249,7 +243,6 @@ class VpnProvider extends ChangeNotifier {
           dns: _dns,
           allowInsecure: _allowInsecure,
           tfo: _tfo,
-          ipv6: ipv6,
         );
         await _vpn.connect(
           ConfigBuilder.toJson(config),
@@ -517,24 +510,6 @@ class VpnProvider extends ChangeNotifier {
     } finally {
       _countryFetching.remove(host);
     }
-  }
-
-  // Есть ли в системе рабочий IPv6 (глобальный/ULA адрес, не loopback/link-local).
-  // Если нет — TUN поднимаем только на IPv4, иначе sing-box падает.
-  Future<bool> _ipv6Available() async {
-    try {
-      final ifaces = await NetworkInterface.list(
-        type: InternetAddressType.IPv6,
-        includeLinkLocal: false,
-        includeLoopback: false,
-      );
-      for (final i in ifaces) {
-        if (i.addresses.any((a) => !a.isLoopback && !a.isLinkLocal)) {
-          return true;
-        }
-      }
-    } catch (_) {}
-    return false;
   }
 
   Future<void> setKillSwitch(bool value) async {
