@@ -31,6 +31,9 @@ class L10n {
   final String tfoDesc;
   final String warpCascadeTitle;
   final String warpCascadeDesc;
+  final String subRefreshTitle;
+  final String subRefreshDesc;
+  final String subRefreshOff;
   final String coresTitle;
   final String routing;
   final String routingFull;
@@ -121,6 +124,9 @@ class L10n {
     required this.tfoDesc,
     required this.warpCascadeTitle,
     required this.warpCascadeDesc,
+    required this.subRefreshTitle,
+    required this.subRefreshDesc,
+    required this.subRefreshOff,
     required this.coresTitle,
     required this.routing,
     required this.routingFull,
@@ -219,6 +225,9 @@ class L10n {
     tfoDesc: 'Speeds up connection setup. Not all servers support it',
     warpCascadeTitle: 'Exit via Cloudflare WARP',
     warpCascadeDesc: 'Route exit through Cloudflare on top of the server (changes exit geo)',
+    subRefreshTitle: 'Auto-update subscriptions',
+    subRefreshDesc: 'How often to refresh subscription keys',
+    subRefreshOff: 'Off',
     coresTitle: 'Cores & versions',
     routing: 'Routing',
     routingFull: 'Full VPN',
@@ -309,6 +318,9 @@ class L10n {
     tfoDesc: 'Ускоряет установку соединения. Поддерживают не все серверы',
     warpCascadeTitle: 'Выход через Cloudflare WARP',
     warpCascadeDesc: 'Финальный выход через Cloudflare поверх сервера (меняет гео выхода)',
+    subRefreshTitle: 'Авто-обновление подписок',
+    subRefreshDesc: 'Как часто обновлять ключи подписок',
+    subRefreshOff: 'Выкл',
     coresTitle: 'Ядра и версии',
     killSwitch: 'Kill Switch',
     killSwitchDesc: 'Блокировать трафик при разрыве VPN',

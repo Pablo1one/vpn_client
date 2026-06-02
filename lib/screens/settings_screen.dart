@@ -71,6 +71,23 @@ class SettingsScreen extends StatelessWidget {
             onChanged: vpn.isConnected ? null : vpn.setKillSwitch,
           ),
           _DnsTile(vpn: vpn, s: s),
+          ListTile(
+            title: Text(s.subRefreshTitle),
+            subtitle: Text(s.subRefreshDesc),
+            trailing: DropdownButton<int>(
+              value: vpn.subRefreshHours,
+              underline: const SizedBox.shrink(),
+              items: [
+                DropdownMenuItem(value: 0, child: Text(s.subRefreshOff)),
+                const DropdownMenuItem(value: 6, child: Text('6 ч')),
+                const DropdownMenuItem(value: 12, child: Text('12 ч')),
+                const DropdownMenuItem(value: 24, child: Text('24 ч')),
+              ],
+              onChanged: (v) {
+                if (v != null) vpn.setSubRefreshHours(v);
+              },
+            ),
+          ),
           const Divider(height: 1),
 
           // ── WARP ─────────────────────────────────────────────────────────
