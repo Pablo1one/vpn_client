@@ -19,6 +19,10 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a &desktop icon"; GroupDescription: "Additional icons:"; Flags: unchecked
+Name: "autostart"; Description: "Launch LightningMcQueen at Windows startup"; GroupDescription: "Startup:"
+
+[Registry]
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "LightningMcQueen"; ValueData: """{app}\LightningMcQueen.exe"""; Flags: uninsdeletevalue; Tasks: autostart
 
 [Files]
 Source: "D:\vpn_client\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

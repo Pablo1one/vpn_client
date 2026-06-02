@@ -34,6 +34,8 @@ class L10n {
   final String subRefreshTitle;
   final String subRefreshDesc;
   final String subRefreshOff;
+  final String autostartTitle;
+  final String autostartDesc;
   final String coresTitle;
   final String routing;
   final String routingFull;
@@ -127,6 +129,8 @@ class L10n {
     required this.subRefreshTitle,
     required this.subRefreshDesc,
     required this.subRefreshOff,
+    required this.autostartTitle,
+    required this.autostartDesc,
     required this.coresTitle,
     required this.routing,
     required this.routingFull,
@@ -228,6 +232,8 @@ class L10n {
     subRefreshTitle: 'Auto-update subscriptions',
     subRefreshDesc: 'How often to refresh subscription keys',
     subRefreshOff: 'Off',
+    autostartTitle: 'Launch at Windows startup',
+    autostartDesc: 'Start with Windows and auto-connect the last profile',
     coresTitle: 'Cores & versions',
     routing: 'Routing',
     routingFull: 'Full VPN',
@@ -321,6 +327,8 @@ class L10n {
     subRefreshTitle: 'Авто-обновление подписок',
     subRefreshDesc: 'Как часто обновлять ключи подписок',
     subRefreshOff: 'Выкл',
+    autostartTitle: 'Запуск с Windows',
+    autostartDesc: 'Запускать со стартом Windows и автоподключать последний профиль',
     coresTitle: 'Ядра и версии',
     killSwitch: 'Kill Switch',
     killSwitchDesc: 'Блокировать трафик при разрыве VPN',

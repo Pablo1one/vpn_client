@@ -88,6 +88,15 @@ class SettingsScreen extends StatelessWidget {
               },
             ),
           ),
+          if (Platform.isWindows)
+            SwitchListTile(
+              secondary: Icon(Icons.power_settings_new_rounded,
+                  size: 20, color: context.ac.textMuted),
+              title: Text(s.autostartTitle),
+              subtitle: Text(s.autostartDesc),
+              value: vpn.launchOnStartup,
+              onChanged: vpn.setLaunchOnStartup,
+            ),
           const Divider(height: 1),
 
           // ── WARP ─────────────────────────────────────────────────────────
