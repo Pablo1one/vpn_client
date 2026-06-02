@@ -77,22 +77,31 @@ class SpeedService {
     if (!_controller.isClosed) _controller.add(SpeedData.empty);
   }
 
+  String get _binDir {
+    final appDir = File(Platform.resolvedExecutable).parent.path;
+    return '$appDir\\data\\flutter_assets\\assets\\bin';
+  }
+
   Future<void> _pollAwgStats() async {
     if (!_active) return;
     try {
+      // Счётчики берём у самого WireGuard через awg.exe (лёгкий свой процесс),
+      // а не powershell Get-NetAdapterStatistics каждую секунду.
+      // `awg show <iface> transfer` → "<pubkey>\t<rx>\t<tx>" по пиру.
       final result = await Process.run(
-        'powershell',
-        [
-          '-Command',
-          '(Get-NetAdapterStatistics -Name "$_awgInterface" -ErrorAction Stop)'
-              ' | Select-Object ReceivedBytes,SentBytes | ConvertTo-Json',
-        ],
+        '$_binDir\\awg.exe',
+        ['show', _awgInterface ?? '', 'transfer'],
         runInShell: false,
       );
       if (result.exitCode != 0) return;
-      final j = jsonDecode(result.stdout as String) as Map<String, dynamic>;
-      final rx = (j['ReceivedBytes'] as num).toInt();
-      final tx = (j['SentBytes'] as num).toInt();
+      final line = (result.stdout as String)
+          .split('\n')
+          .map((l) => l.trim())
+          .firstWhere((l) => l.isNotEmpty, orElse: () => '');
+      final parts = line.split(RegExp(r'\s+'));
+      if (parts.length < 3) return;
+      final rx = int.tryParse(parts[parts.length - 2]) ?? 0; // received = download
+      final tx = int.tryParse(parts[parts.length - 1]) ?? 0; // sent = upload
       final now = DateTime.now();
 
       if (_prevRx != null && _prevSample != null) {
@@ -117,23 +126,15 @@ class SpeedService {
 
   Future<void> _updateAwgPing() async {
     if (!_active) return;
+    // TCP-хендшейк до публичного хоста ЧЕРЕЗ туннель: работает даже когда
+    // VPN-выход режет ICMP (а ping.exe там возвращал пусто), и не плодит процессы.
     try {
-      // Пингуем публичный хост ЧЕРЕЗ туннель (сам VPN-сервер часто блокирует ICMP).
-      // Это измеряет реальную задержку пути и совпадает по смыслу с пингом др. протоколов.
-      final result = await Process.run(
-        'ping', ['-n', '1', '-w', '3000', '1.1.1.1'],
-        runInShell: false,
-      );
-      final out = (result.stdout as String).toLowerCase();
-      final match = RegExp(r'time[<=](\d+)ms').firstMatch(out)
-          ?? RegExp(r'время[<=](\d+)мс').firstMatch(out);
-      if (match != null) {
-        _pingMs = int.parse(match.group(1)!);
-      } else if (out.contains('time<1ms') || out.contains('время<1мс')) {
-        _pingMs = 1;
-      } else {
-        _pingMs = -1;
-      }
+      final sw = Stopwatch()..start();
+      final socket = await Socket.connect('1.1.1.1', 443,
+          timeout: const Duration(seconds: 3));
+      sw.stop();
+      socket.destroy();
+      _pingMs = sw.elapsedMilliseconds;
     } catch (_) {
       _pingMs = -1;
     }
