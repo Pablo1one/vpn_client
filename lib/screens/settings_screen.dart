@@ -75,6 +75,14 @@ class SettingsScreen extends StatelessWidget {
 
           // ── WARP ─────────────────────────────────────────────────────────
           _SectionHeader(s.warpTitle),
+          SwitchListTile(
+            secondary: Icon(Icons.public_rounded,
+                size: 20, color: context.ac.textMuted),
+            title: Text(s.warpCascadeTitle),
+            subtitle: Text(s.warpCascadeDesc),
+            value: vpn.warpCascade,
+            onChanged: vpn.isConnected ? null : vpn.setWarpCascade,
+          ),
           ListTile(
             leading: Icon(Icons.cloud_outlined,
                 size: 20, color: context.ac.textMuted),

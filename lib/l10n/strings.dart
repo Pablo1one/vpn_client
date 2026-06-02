@@ -29,6 +29,8 @@ class L10n {
   final String allowInsecureDesc;
   final String tfoTitle;
   final String tfoDesc;
+  final String warpCascadeTitle;
+  final String warpCascadeDesc;
   final String coresTitle;
   final String routing;
   final String routingFull;
@@ -117,6 +119,8 @@ class L10n {
     required this.allowInsecureDesc,
     required this.tfoTitle,
     required this.tfoDesc,
+    required this.warpCascadeTitle,
+    required this.warpCascadeDesc,
     required this.coresTitle,
     required this.routing,
     required this.routingFull,
@@ -213,6 +217,8 @@ class L10n {
     allowInsecureDesc: 'Accept untrusted TLS certificates',
     tfoTitle: 'TCP Fast Open',
     tfoDesc: 'Speeds up connection setup. Not all servers support it',
+    warpCascadeTitle: 'Exit via Cloudflare WARP',
+    warpCascadeDesc: 'Route exit through Cloudflare on top of the server (changes exit geo)',
     coresTitle: 'Cores & versions',
     routing: 'Routing',
     routingFull: 'Full VPN',
@@ -301,6 +307,8 @@ class L10n {
     allowInsecureDesc: 'Принимать недоверенные TLS-сертификаты',
     tfoTitle: 'TCP Fast Open',
     tfoDesc: 'Ускоряет установку соединения. Поддерживают не все серверы',
+    warpCascadeTitle: 'Выход через Cloudflare WARP',
+    warpCascadeDesc: 'Финальный выход через Cloudflare поверх сервера (меняет гео выхода)',
     coresTitle: 'Ядра и версии',
     killSwitch: 'Kill Switch',
     killSwitchDesc: 'Блокировать трафик при разрыве VPN',

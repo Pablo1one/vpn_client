@@ -39,6 +39,7 @@ class ConfigBuilder {
     String dns = '8.8.8.8',
     bool allowInsecure = false,
     bool tfo = false,
+    Map<String, dynamic>? warp, // WARP-каскад: выход через Cloudflare поверх сервера
   }) {
     final dnsAddr = dns.trim().isEmpty ? '8.8.8.8' : dns.trim();
     final Map<String, dynamic> outbound = switch (profile.protocol) {
@@ -116,9 +117,12 @@ class ConfigBuilder {
           'tag': 'direct',
         },
       ],
+      // WARP-каскад: endpoint дозванивается до Cloudflare ЧЕРЕЗ proxy (наш сервер),
+      // финал маршрута → warp. Когда warp == null — секции нет, всё как обычно.
+      if (warp != null) 'endpoints': [_warpEndpoint(warp, detour: 'proxy')],
       'route': {
         'auto_detect_interface': true,
-        'final': 'proxy',
+        'final': warp != null ? 'warp' : 'proxy',
         'default_domain_resolver': {'server': 'dns-direct', 'strategy': 'prefer_ipv4'},
         'rules': rules,
       },
@@ -130,6 +134,8 @@ class ConfigBuilder {
     bool killSwitch = false,
     RoutingMode routingMode = RoutingMode.fullVpn,
     String dns = '8.8.8.8',
+    List<String> ruCidrs = const [],
+    Map<String, dynamic>? warp, // WARP-каскад поверх socks-прокси (нашего сервера)
   }) {
     final dnsAddr = dns.trim().isEmpty ? '8.8.8.8' : dns.trim();
     return {
@@ -180,17 +186,27 @@ class ConfigBuilder {
             'domain_resolver': {'server': 'dns', 'strategy': 'prefer_ipv4'},
           },
         ],
+        // WARP-каскад: дозвон до Cloudflare через proxy (socks → наш сервер)
+        if (warp != null) 'endpoints': [_warpEndpoint(warp, detour: 'proxy')],
         'route': {
           'auto_detect_interface': true,
-          'final': 'proxy',
+          'final': warp != null ? 'warp' : 'proxy',
           // sing-box 1.12: глобальный резолвер доменов (иначе первый резолв буксует → "нет интернета")
           'default_domain_resolver': {'server': 'dns', 'strategy': 'prefer_ipv4'},
           'rules': [
-            // исключаем свои процессы чтобы не было петли маршрутизации
+            // исключаем только прокси-процессы (от петли). Сам клиент НЕ исключаем —
+            // иначе его трафик (в т.ч. регистрация WARP) шёл бы мимо туннеля и в РФ
+            // не достучался бы до API Cloudflare.
             {
-              'process_name': ['xray.exe', 'sing-box.exe', 'LightningMcQueen.exe'],
+              'process_name': ['xray.exe', 'sing-box.exe'],
               'outbound': 'direct',
             },
+            // в каскаде приватное и (при bypass) российское — мимо WARP, напрямую
+            if (warp != null) {'ip_is_private': true, 'outbound': 'direct'},
+            if (warp != null &&
+                routingMode == RoutingMode.russiaBypass &&
+                ruCidrs.isNotEmpty)
+              {'ip_cidr': ruCidrs, 'outbound': 'direct'},
             {'action': 'sniff'},
             {'action': 'hijack-dns', 'protocol': 'dns'},
           ],
@@ -524,6 +540,41 @@ class ConfigBuilder {
     rules.add({'type': 'field', 'network': 'tcp,udp', 'outboundTag': 'proxy'});
 
     return {'domainStrategy': 'IPIfNonMatch', 'rules': rules};
+  }
+
+  // WARP как wireguard-endpoint (sing-box 1.12). detour — через какой outbound
+  // дозваниваться до эндпоинта Cloudflare (в каскаде = наш сервер).
+  // Только IPv4 (v6 у нас отключён), чтобы не ловить "network unreachable".
+  static Map<String, dynamic> _warpEndpoint(
+    Map<String, dynamic> w, {
+    required String detour,
+  }) {
+    final ep = (w['endpoint'] as String? ?? '').trim();
+    final ci = ep.lastIndexOf(':');
+    final host = ci >= 0 ? ep.substring(0, ci) : ep;
+    var port = ci >= 0 ? (int.tryParse(ep.substring(ci + 1)) ?? 2408) : 2408;
+    // WARP API отдаёт v4-эндпоинт с портом-заглушкой :0 — реальный порт 2408
+    if (port <= 0) port = 2408;
+    return {
+      'type': 'wireguard',
+      'tag': 'warp',
+      'mtu': 1280,
+      'address': [w['address']], // v4/32 из WARP-конфига
+      'private_key': w['privateKey'],
+      'peers': [
+        {
+          'address': host,
+          'port': port,
+          'public_key': w['publicKey'],
+          'allowed_ips': ['0.0.0.0/0'],
+          'persistent_keepalive_interval': 25,
+          // reserved (client_id) — критично: без него Cloudflare не маршрутизирует
+          // обратный трафик (download ≈ 0 при живом хендшейке)
+          if (w['reserved'] != null) 'reserved': w['reserved'],
+        },
+      ],
+      'detour': detour,
+    };
   }
 
   // sing-box multiplex (требует поддержки на сервере)
