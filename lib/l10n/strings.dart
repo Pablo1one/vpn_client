@@ -31,6 +31,8 @@ class L10n {
   final String tfoDesc;
   final String warpCascadeTitle;
   final String warpCascadeDesc;
+  final String adblockTitle;
+  final String adblockDesc;
   final String subRefreshTitle;
   final String subRefreshDesc;
   final String subRefreshOff;
@@ -130,6 +132,8 @@ class L10n {
     required this.tfoDesc,
     required this.warpCascadeTitle,
     required this.warpCascadeDesc,
+    required this.adblockTitle,
+    required this.adblockDesc,
     required this.subRefreshTitle,
     required this.subRefreshDesc,
     required this.subRefreshOff,
@@ -237,6 +241,8 @@ class L10n {
     tfoDesc: 'Speeds up connection setup. Not all servers support it',
     warpCascadeTitle: 'Exit via Cloudflare WARP',
     warpCascadeDesc: 'Route exit through Cloudflare on top of the server (changes exit geo)',
+    adblockTitle: 'Block ads',
+    adblockDesc: 'Reject known ad and tracker domains',
     subRefreshTitle: 'Auto-update subscriptions',
     subRefreshDesc: 'How often to refresh subscription keys',
     subRefreshOff: 'Off',
@@ -336,6 +342,8 @@ class L10n {
     tfoDesc: 'Ускоряет установку соединения. Поддерживают не все серверы',
     warpCascadeTitle: 'Выход через Cloudflare WARP',
     warpCascadeDesc: 'Финальный выход через Cloudflare поверх сервера (меняет гео выхода)',
+    adblockTitle: 'Блокировать рекламу',
+    adblockDesc: 'Резать известные рекламные и трекерные домены',
     subRefreshTitle: 'Авто-обновление подписок',
     subRefreshDesc: 'Как часто обновлять ключи подписок',
     subRefreshOff: 'Выкл',

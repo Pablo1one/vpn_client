@@ -38,6 +38,7 @@ class VpnProvider extends ChangeNotifier {
   bool _allowInsecure = false; // принимать недоверенные TLS-сертификаты
   bool _tfo = false;           // TCP Fast Open
   bool _warpCascade = false;   // выход через Cloudflare WARP поверх нашего сервера
+  bool _blockAds = false;      // блокировка рекламы (geosite-ads reject)
   String? _error;
 
   bool _warpActive = false;
@@ -80,6 +81,7 @@ class VpnProvider extends ChangeNotifier {
   bool get allowInsecure => _allowInsecure;
   bool get tfo => _tfo;
   bool get warpCascade => _warpCascade;
+  bool get blockAds => _blockAds;
   int get subRefreshHours => _subRefreshHours;
   bool get launchOnStartup => _launchOnStartup;
   String? get error => _error;
@@ -160,6 +162,7 @@ class VpnProvider extends ChangeNotifier {
     _allowInsecure = prefs.getBool('allowInsecure') ?? false;
     _tfo = prefs.getBool('tfo') ?? false;
     _warpCascade = prefs.getBool('warpCascade') ?? false;
+    _blockAds = prefs.getBool('blockAds') ?? false;
     _subRefreshHours = prefs.getInt('subRefreshHours') ?? 12;
     if (Platform.isWindows) _launchOnStartup = await _readStartupEnabled();
     _routingMode = RoutingMode.values.firstWhere(
@@ -374,6 +377,7 @@ class VpnProvider extends ChangeNotifier {
           tfo: _tfo,
           warp: warpJson,
           bypassApps: _bypassApps,
+          adsRuleSet: _adsRuleSet,
         );
         await _vpn.connect(ConfigBuilder.toJson(config));
       } else {
@@ -397,6 +401,7 @@ class VpnProvider extends ChangeNotifier {
           ruCidrs: ruCidrs,
           warp: warpJson,
           bypassApps: _bypassApps,
+          adsRuleSet: _adsRuleSet,
         );
         await _vpn.connectProxy(
           xrayConfigJson: xrayJson,
@@ -426,6 +431,7 @@ class VpnProvider extends ChangeNotifier {
         ruCidrs: ruCidrs,
         warp: warpJson,
         bypassApps: _bypassApps,
+        adsRuleSet: _adsRuleSet,
       );
       await _vpn.connectProxy(
         singboxConfigJson: ConfigBuilder.toJson(proxyConfig),
@@ -444,6 +450,7 @@ class VpnProvider extends ChangeNotifier {
         tfo: _tfo,
         warp: warpJson,
         bypassApps: _bypassApps,
+        adsRuleSet: _adsRuleSet,
       );
       await _vpn.connect(
         ConfigBuilder.toJson(config),
@@ -791,6 +798,20 @@ class VpnProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('warpCascade', value);
     notifyListeners();
+  }
+
+  Future<void> setBlockAds(bool value) async {
+    _blockAds = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('blockAds', value);
+    notifyListeners();
+  }
+
+  // путь к бандлу geosite-ads .srs (для блокировки рекламы), null если выкл/не Windows
+  String? get _adsRuleSet {
+    if (!_blockAds || !Platform.isWindows) return null;
+    final appDir = File(Platform.resolvedExecutable).parent.path;
+    return '$appDir\\data\\flutter_assets\\assets\\data\\geosite-ads.srs';
   }
 
   Future<void> setFragParams({
