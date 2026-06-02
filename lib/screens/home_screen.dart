@@ -9,6 +9,7 @@ import '../services/vpn_service.dart';
 import '../utils/config_builder.dart';
 import '../l10n/strings.dart';
 import '../theme.dart';
+import '../widgets/world_map.dart';
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
@@ -29,7 +30,12 @@ class HomeScreen extends StatelessWidget {
           const SizedBox(width: 6),
         ],
       ),
-      body: Center(
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: WorldMapBackground(color: c.primary, opacity: 0.12),
+          ),
+          Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -85,6 +91,8 @@ class HomeScreen extends StatelessWidget {
             ],
           ],
         ),
+          ),
+        ],
       ),
     );
   }
@@ -202,6 +210,45 @@ class _ConnectButtonState extends State<_ConnectButton>
                 ? c.btnActive
                 : c.btnInactive;
 
+    final isLight = Theme.of(context).brightness == Brightness.light;
+
+    // Заливка: в светлой теме — насыщенная (низкая прозрачность давала блёклый
+    // серый), в тёмной — прежняя «неоновая» полупрозрачность.
+    final double fillHi, fillLo;
+    if (isLight) {
+      if (connected || busy || canPress) {
+        fillHi = 0.95; fillLo = 0.60;
+      } else {
+        fillHi = 0.45; fillLo = 0.22; // нет профиля — приглушённо
+      }
+    } else {
+      fillHi = connected ? 0.28 : 0.16;
+      fillLo = connected ? 0.10 : 0.05;
+    }
+
+    // Контур: подключено — оранжевый в светлой теме (был жёлтый), cyan в тёмной.
+    const connectedOrange = Color(0xFFFF7A00);
+    final borderColor = connected
+        ? (isLight ? connectedOrange : c.upload)
+        : btnColor.withOpacity(
+            canPress ? (isLight ? 1.0 : 0.85) : (isLight ? 0.45 : 0.35));
+
+    // Иконка: в светлой теме нужен контраст на насыщенной заливке; идл — молния.
+    final Color iconColor;
+    if (isLight) {
+      if (connected || busy) {
+        iconColor = Colors.white;
+      } else if (canPress) {
+        iconColor = const Color(0xFF8A1200); // тёмно-красная на жёлтом
+      } else {
+        iconColor = btnColor.withOpacity(0.55);
+      }
+    } else {
+      iconColor = btnColor.withOpacity(canPress || connected || busy ? 1 : 0.3);
+    }
+    final idleIcon =
+        isLight ? Icons.bolt : Icons.power_settings_new_rounded;
+
     final button = AnimatedScale(
       scale: _pressed ? 0.93 : 1.0,
       duration: const Duration(milliseconds: 110),
@@ -216,15 +263,12 @@ class _ConnectButtonState extends State<_ConnectButton>
             center: const Alignment(-0.3, -0.45),
             radius: 0.95,
             colors: [
-              btnColor.withOpacity(connected ? 0.28 : 0.16),
-              btnColor.withOpacity(connected ? 0.10 : 0.05),
+              btnColor.withOpacity(fillHi),
+              btnColor.withOpacity(fillLo),
             ],
           ),
           border: Border.all(
-            // подключено — жёлтый контур поверх красного фона
-            color: connected
-                ? c.upload
-                : btnColor.withOpacity(canPress ? 0.85 : 0.35),
+            color: borderColor,
             width: connected ? 3 : 2,
           ),
           boxShadow: connected
@@ -248,9 +292,9 @@ class _ConnectButtonState extends State<_ConnectButton>
                 ],
         ),
         child: Icon(
-          busy ? Icons.close_rounded : Icons.power_settings_new_rounded,
+          busy ? Icons.close_rounded : idleIcon,
           size: 68,
-          color: btnColor.withOpacity(canPress || connected || busy ? 1 : 0.3),
+          color: iconColor,
         ),
       ),
     );
