@@ -105,6 +105,7 @@ class SettingsScreen extends StatelessWidget {
               value: vpn.launchOnStartup,
               onChanged: vpn.setLaunchOnStartup,
             ),
+          if (Platform.isWindows) const _RouteCleanupTile(),
           const Divider(height: 1),
 
           // ── WARP ─────────────────────────────────────────────────────────
@@ -970,9 +971,57 @@ class _CoresTileState extends State<_CoresTile> {
   }
 }
 
+// ── Route cleanup tile ──────────────────────────────────────────────────────
+
+class _RouteCleanupTile extends StatefulWidget {
+  const _RouteCleanupTile();
+
+  @override
+  State<_RouteCleanupTile> createState() => _RouteCleanupTileState();
+}
+
+class _RouteCleanupTileState extends State<_RouteCleanupTile> {
+  bool _running = false;
+
+  Future<void> _run() async {
+    setState(() => _running = true);
+    final vpn = context.read<VpnProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+    final n = await vpn.cleanBypassRoutes();
+    if (!mounted) return;
+    setState(() => _running = false);
+    messenger.showSnackBar(SnackBar(
+      content: Text(n > 0
+          ? 'Удалено маршрутов в обход VPN: $n'
+          : 'Маршрутов в обход VPN не найдено'),
+      duration: const Duration(seconds: 2),
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ac;
+    return ListTile(
+      leading: Icon(Icons.alt_route_rounded, size: 20, color: c.textMuted),
+      title: const Text('Очистить маршруты в обход VPN'),
+      subtitle: Text(
+        'Удаляет чужие маршруты (split-tunnel других VPN), уводящие трафик мимо туннеля',
+        style: TextStyle(fontSize: 12, color: c.textMuted),
+      ),
+      trailing: _running
+          ? SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2, color: c.primary),
+            )
+          : TextButton(onPressed: _run, child: const Text('Очистить')),
+    );
+  }
+}
+
 // ── Update tile ───────────────────────────────────────────────────────────────
 
-enum _UpdateState { idle, checking, upToDate, available, error }
+enum _UpdateState { idle, checking, upToDate, available, downloading, error }
 
 class _UpdateTile extends StatefulWidget {
   const _UpdateTile();
@@ -986,6 +1035,7 @@ class _UpdateTileState extends State<_UpdateTile> {
   _UpdateState _state = _UpdateState.idle;
   UpdateInfo? _info;
   String _currentVersion = '';
+  double _progress = 0;
 
   @override
   void initState() {
@@ -1010,6 +1060,26 @@ class _UpdateTileState extends State<_UpdateTile> {
     }
   }
 
+  Future<void> _downloadAndRun() async {
+    if (_info == null) return;
+    setState(() {
+      _state = _UpdateState.downloading;
+      _progress = 0;
+    });
+    try {
+      await _svc.downloadAndRun(_info!, onProgress: (p) {
+        if (mounted) setState(() => _progress = p);
+      });
+      // при успехе приложение закрывается из downloadAndRun (exit 0)
+    } catch (_) {
+      if (!mounted) return;
+      // фоллбэк — открыть страницу релиза в браузере
+      await launchUrl(Uri.parse(_info!.downloadUrl),
+          mode: LaunchMode.externalApplication);
+      if (mounted) setState(() => _state = _UpdateState.available);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.ac;
@@ -1019,6 +1089,8 @@ class _UpdateTileState extends State<_UpdateTile> {
       _UpdateState.upToDate => s.upToDate,
       _UpdateState.error => s.updateCheckFailed,
       _UpdateState.available => '${s.updateAvailable}: v${_info!.version}',
+      _UpdateState.downloading =>
+        'Загрузка… ${(_progress * 100).toStringAsFixed(0)}%',
       _UpdateState.idle =>
         _currentVersion.isNotEmpty ? '${s.version} $_currentVersion' : '',
     };
@@ -1041,21 +1113,29 @@ class _UpdateTileState extends State<_UpdateTile> {
               child: CircularProgressIndicator(
                   strokeWidth: 2, color: c.primary),
             )
-          : _state == _UpdateState.available
-              ? FilledButton.tonal(
-                  onPressed: () => launchUrl(Uri.parse(_info!.downloadUrl),
-                      mode: LaunchMode.externalApplication),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: c.primary.withOpacity(0.15),
-                    foregroundColor: c.primary,
-                  ),
-                  child: Text(s.download),
+          : _state == _UpdateState.downloading
+              ? SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: c.primary,
+                      value: _progress > 0 ? _progress : null),
                 )
-              : TextButton(
-                  onPressed:
-                      _state == _UpdateState.checking ? null : _check,
-                  child: Text(s.checkForUpdates),
-                ),
+              : _state == _UpdateState.available
+                  ? FilledButton.tonal(
+                      onPressed: _downloadAndRun,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: c.primary.withOpacity(0.15),
+                        foregroundColor: c.primary,
+                      ),
+                      child: Text(s.download),
+                    )
+                  : TextButton(
+                      onPressed:
+                          _state == _UpdateState.checking ? null : _check,
+                      child: Text(s.checkForUpdates),
+                    ),
     );
   }
 }

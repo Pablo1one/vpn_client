@@ -23,7 +23,12 @@ class ProfilesScreen extends StatelessWidget {
       appBar: AppBar(
         title: Text(s.profilesTab),
         actions: [
-          if (vpn.profiles.isNotEmpty)
+          if (vpn.profiles.isNotEmpty) ...[
+            IconButton(
+              icon: const Icon(Icons.bolt_rounded),
+              tooltip: 'Подключиться к быстрейшему',
+              onPressed: vpn.pinging ? null : () => _connectFastest(context),
+            ),
             vpn.pinging
                 ? const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 16),
@@ -40,6 +45,7 @@ class ProfilesScreen extends StatelessWidget {
                         : 'Пинг',
                     onPressed: vpn.isConnected ? null : vpn.pingAll,
                   ),
+          ],
         ],
       ),
       body: vpn.profiles.isEmpty
@@ -68,6 +74,23 @@ class ProfilesScreen extends StatelessWidget {
               child: const Icon(Icons.add),
             ),
     );
+  }
+
+  Future<void> _connectFastest(BuildContext context) async {
+    final vpn = context.read<VpnProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(const SnackBar(
+        content: Text('Ищу быстрейший сервер…'),
+        duration: Duration(seconds: 2)));
+    final best = await vpn.connectFastest();
+    if (!context.mounted) return;
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(SnackBar(
+      content: Text(best == null
+          ? 'Не удалось измерить пинг ни одного сервера'
+          : 'Быстрейший: ${best.name}'),
+      duration: const Duration(seconds: 2),
+    ));
   }
 
   void _openImport(BuildContext context) => Navigator.push(

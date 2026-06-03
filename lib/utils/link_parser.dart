@@ -2,20 +2,75 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/profile.dart';
 
+/// Данные о подписке из заголовка subscription-userinfo (трафик/срок).
+class SubUserInfo {
+  final int used;        // upload + download, байт
+  final int total;       // лимит, байт (0 = безлимит)
+  final int? expireEpoch; // unix-секунды окончания (null = бессрочно)
+
+  const SubUserInfo({required this.used, required this.total, this.expireEpoch});
+
+  Map<String, dynamic> toJson() =>
+      {'used': used, 'total': total, 'expire': expireEpoch};
+  factory SubUserInfo.fromJson(Map<String, dynamic> j) => SubUserInfo(
+        used: (j['used'] as num?)?.toInt() ?? 0,
+        total: (j['total'] as num?)?.toInt() ?? 0,
+        expireEpoch: (j['expire'] as num?)?.toInt(),
+      );
+
+  // порог "безлимита": если остаётся больше 3 ТБ — показываем ∞
+  static const int _infinity = 3 * 1024 * 1024 * 1024 * 1024;
+
+  int get remaining {
+    final r = total - used;
+    return r > 0 ? r : 0;
+  }
+
+  /// true → трафик считаем безлимитным (total не задан или остаток > 3 ТБ).
+  bool get unlimited => total <= 0 || remaining > _infinity;
+
+  /// Осталось дней до окончания (null — бессрочно), отрицательное = просрочено.
+  int? get daysLeft {
+    if (expireEpoch == null) return null;
+    return DateTime.fromMillisecondsSinceEpoch(expireEpoch! * 1000)
+        .difference(DateTime.now())
+        .inDays;
+  }
+
+  /// Метка остатка трафика: "∞" либо "12.3 ГБ".
+  String get trafficLabel => unlimited ? '∞' : formatBytes(remaining);
+
+  static String formatBytes(int b) {
+    if (b <= 0) return '0 Б';
+    const units = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ'];
+    double v = b.toDouble();
+    int i = 0;
+    while (v >= 1024 && i < units.length - 1) {
+      v /= 1024;
+      i++;
+    }
+    final s = v >= 100 || i == 0 ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
+    return '$s ${units[i]}';
+  }
+}
+
 class ParseResult {
   final VpnProfile? profile;
   final List<VpnProfile>? batch;
   final String? error;
+  final SubUserInfo? subInfo;
 
   ParseResult.success(this.profile)
       : batch = null,
-        error = null;
-  ParseResult.batch(this.batch)
+        error = null,
+        subInfo = null;
+  ParseResult.batch(this.batch, {this.subInfo})
       : profile = null,
         error = null;
   ParseResult.failure(this.error)
       : profile = null,
-        batch = null;
+        batch = null,
+        subInfo = null;
 
   bool get isSubscription => batch != null;
 }
@@ -60,6 +115,8 @@ class LinkParser {
       }
 
       final body = response.body.trim();
+      // трафик/срок подписки из стандартного заголовка Hiddify/v2ray
+      final subInfo = _parseUserInfo(response.headers['subscription-userinfo']);
 
       // Reject HTML pages (e.g. Hiddify web UI returned due to ?home=true)
       if (body.startsWith('<!') || body.startsWith('<html')) {
@@ -74,7 +131,9 @@ class LinkParser {
         final profiles = _parseJsonSubscription(json)
             .map((p) => p.copyWith(subscriptionUrl: url))
             .toList();
-        if (profiles.isNotEmpty) return ParseResult.batch(profiles);
+        if (profiles.isNotEmpty) {
+          return ParseResult.batch(profiles, subInfo: subInfo);
+        }
       } catch (_) {}
 
       // 2. Try base64 decode → line-by-line URIs
@@ -104,10 +163,29 @@ class LinkParser {
       if (profiles.isEmpty) {
         return ParseResult.failure('No valid profiles found in subscription');
       }
-      return ParseResult.batch(profiles);
+      return ParseResult.batch(profiles, subInfo: subInfo);
     } catch (e) {
       return ParseResult.failure('Fetch error: $e');
     }
+  }
+
+  // "upload=N; download=N; total=N; expire=N" → SubUserInfo
+  static SubUserInfo? _parseUserInfo(String? header) {
+    if (header == null || header.trim().isEmpty) return null;
+    final m = <String, int>{};
+    for (final part in header.split(';')) {
+      final kv = part.split('=');
+      if (kv.length == 2) {
+        final v = int.tryParse(kv[1].trim());
+        if (v != null) m[kv[0].trim().toLowerCase()] = v;
+      }
+    }
+    if (m.isEmpty) return null;
+    return SubUserInfo(
+      used: (m['upload'] ?? 0) + (m['download'] ?? 0),
+      total: m['total'] ?? 0,
+      expireEpoch: (m['expire'] ?? 0) > 0 ? m['expire'] : null,
+    );
   }
 
   /// Removes Hiddify web-UI query params (?home=true, ?base64=...) that
