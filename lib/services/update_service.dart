@@ -54,9 +54,8 @@ class UpdateService {
     );
   }
 
-  /// Скачивает инсталлятор во временную папку и запускает его, затем закрывает
-  /// приложение (чтобы инсталлятор смог перезаписать файлы). Только Windows.
-  /// [onProgress] — доля загрузки 0..1 (если сервер отдал Content-Length).
+  // качает инсталятор во временную папку, запускает и закрывает приложение
+  // (чтобы он перезаписал файлы). только windows. onProgress - доля 0..1
   Future<void> downloadAndRun(
     UpdateInfo info, {
     void Function(double progress)? onProgress,

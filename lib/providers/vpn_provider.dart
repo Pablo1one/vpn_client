@@ -216,6 +216,11 @@ class VpnProvider extends ChangeNotifier {
   static const _runKey =
       r'HKCU\Software\Microsoft\Windows\CurrentVersion\Run';
   static const _runValue = 'LightningMcQueen';
+  // task manager хранит вкл/выкл автозапуска отдельно. если тут первый байт 0x03 -
+  // запись в Run игнорируется (Отключено). 0x02 - включено
+  static const _approvedKey =
+      r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run';
+  static const _approvedEnabled = '020000000000000000000000';
 
   Future<bool> _readStartupEnabled() async {
     try {
@@ -241,9 +246,20 @@ class VpnProvider extends ChangeNotifier {
           ['add', _runKey, '/v', _runValue, '/t', 'REG_SZ', '/d', '"$exe"', '/f'],
           runInShell: false,
         );
+        // снять возможный "Отключено" из Task Manager (иначе Run-ключ игнорируется)
+        await Process.run(
+          'reg',
+          ['add', _approvedKey, '/v', _runValue, '/t', 'REG_BINARY',
+           '/d', _approvedEnabled, '/f'],
+          runInShell: false,
+        );
       } else {
         await Process.run(
           'reg', ['delete', _runKey, '/v', _runValue, '/f'],
+          runInShell: false,
+        );
+        await Process.run(
+          'reg', ['delete', _approvedKey, '/v', _runValue, '/f'],
           runInShell: false,
         );
       }
@@ -312,8 +328,8 @@ class VpnProvider extends ChangeNotifier {
     try {
       final profile = _activeProfile!;
 
-      // в режиме «весь трафик через VPN» вычищаем чужие маршруты в обход туннеля
-      // (split-tunnel сторонних VPN добавляет тысячи RU-подсетей на шлюз → утечка)
+      // в режиме весь трафик через впн чистим чужие маршруты мимо туннеля
+      // (сторонний split-tunnel пишет тысячи ру-подсетей на шлюз и трафик утекает)
       if (_routingMode == RoutingMode.fullVpn && Platform.isWindows) {
         await _routeCleanup.cleanBypassRoutes();
       }
@@ -573,8 +589,7 @@ class VpnProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Пингует все ключи и подключается к самому быстрому (наименьший ping).
-  /// Возвращает выбранный профиль или null, если ни один недоступен.
+  // пингует все ключи и коннектится к самому быстрому. вернёт профиль или null
   Future<VpnProfile?> connectFastest() async {
     if (_profiles.isEmpty) return null;
     await pingAll();
@@ -596,8 +611,7 @@ class VpnProvider extends ChangeNotifier {
     return best;
   }
 
-  /// Удаляет чужие маршруты в обход VPN (ручной вызов из настроек).
-  /// Возвращает число удалённых маршрутов.
+  // ручная чистка чужих маршрутов из настроек, вернёт сколько удалили
   Future<int> cleanBypassRoutes() => _routeCleanup.cleanBypassRoutes();
 
   Future<void> disconnect() async {
@@ -699,7 +713,7 @@ class VpnProvider extends ChangeNotifier {
     await prefs.setString('subInfo', jsonEncode(m));
   }
 
-  /// Сохранить данные подписки сразу при импорте (без ожидания авто-обновления).
+  // сохранить данные подписки сразу при импорте, не ждём автообновления
   Future<void> setSubInfo(String url, SubUserInfo info) async {
     _subInfo[url] = info;
     await _saveSubInfo();

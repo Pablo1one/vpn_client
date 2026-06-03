@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/profile.dart';
 
-/// Данные о подписке из заголовка subscription-userinfo (трафик/срок).
+// данные подписки из заголовка subscription-userinfo (трафик и срок)
 class SubUserInfo {
   final int used;        // upload + download, байт
   final int total;       // лимит, байт (0 = безлимит)
@@ -18,7 +18,7 @@ class SubUserInfo {
         expireEpoch: (j['expire'] as num?)?.toInt(),
       );
 
-  // порог "безлимита": если остаётся больше 3 ТБ — показываем ∞
+  // если остаётся больше 3 тб - считаем безлимитом и рисуем ∞
   static const int _infinity = 3 * 1024 * 1024 * 1024 * 1024;
 
   int get remaining {
@@ -26,10 +26,10 @@ class SubUserInfo {
     return r > 0 ? r : 0;
   }
 
-  /// true → трафик считаем безлимитным (total не задан или остаток > 3 ТБ).
+  // безлимит: total не задан или остаток больше 3 тб
   bool get unlimited => total <= 0 || remaining > _infinity;
 
-  /// Осталось дней до окончания (null — бессрочно), отрицательное = просрочено.
+  // сколько дней осталось (null - бессрочно, минус - просрочено)
   int? get daysLeft {
     if (expireEpoch == null) return null;
     return DateTime.fromMillisecondsSinceEpoch(expireEpoch! * 1000)
@@ -37,7 +37,7 @@ class SubUserInfo {
         .inDays;
   }
 
-  /// Метка остатка трафика: "∞" либо "12.3 ГБ".
+  // метка остатка: ∞ либо например 12.3 гб
   String get trafficLabel => unlimited ? '∞' : formatBytes(remaining);
 
   static String formatBytes(int b) {

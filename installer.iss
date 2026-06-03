@@ -1,6 +1,6 @@
 [Setup]
 AppName=LightningMcQueen
-AppVersion=1.0.0
+AppVersion=1.0.1
 AppPublisher=LightningMcQueen
 DefaultDirName={autopf}\LightningMcQueen
 DefaultGroupName=LightningMcQueen
@@ -23,6 +23,8 @@ Name: "autostart"; Description: "Launch LightningMcQueen at Windows startup"; Gr
 
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "LightningMcQueen"; ValueData: """{app}\LightningMcQueen.exe"""; Flags: uninsdeletevalue; Tasks: autostart
+; Task Manager: пометить автозапуск как включённый (0x02), иначе запись в Run игнорируется ("Отключено")
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"; ValueType: binary; ValueName: "LightningMcQueen"; ValueData: "02 00 00 00 00 00 00 00 00 00 00 00"; Flags: uninsdeletevalue; Tasks: autostart
 
 [Files]
 Source: "D:\vpn_client\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

@@ -1,13 +1,10 @@
 import 'dart:io';
 import 'log_service.dart';
 
-/// Kill switch на уровне брандмауэра Windows (NetFirewall).
-///
-/// Когда включён — исходящий трафик по умолчанию запрещён во всех профилях,
-/// разрешения-исключения остаются только для: туннельного адаптера, IP сервера,
-/// локальной сети (роутер/DHCP/DNS) и loopback. Если туннель падает —
-/// блокировка сохраняется, и трафик не утекает мимо VPN (в отличие от
-/// strict_route, который снимается вместе с процессом sing-box).
+// kill switch через брандмауэр windows. когда включён - весь исходящий трафик
+// запрещён, кроме туннеля, ip сервера, локалки и loopback. если туннель падает -
+// блокировка остаётся и трафик не утекает (в отличие от strict_route, он слетает
+// вместе с процесом sing-box)
 class KillSwitchService {
   static const _group = 'LightningMcQueen-KillSwitch';
   bool _active = false;
@@ -22,8 +19,8 @@ class KillSwitchService {
     if (!Platform.isWindows) return;
     final ips = await _resolve(serverHost);
 
-    // правила-разрешения добавляем ПЕРЕД сменой дефолта на Block,
-    // чтобы не было окна, в котором заблокировано вообще всё
+    // разрешения добавляем до смены дефолта на block, иначе будет окошко
+    // где заблокировано вобще всё
     final cmds = <String>[
       'Remove-NetFirewallRule -Group "$_group" -ErrorAction SilentlyContinue',
       _allow('LMQ Loopback', '-RemoteAddress 127.0.0.0/8'),
