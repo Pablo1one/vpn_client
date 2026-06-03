@@ -52,6 +52,46 @@ class UpdateService {
     );
   }
 
+  /// Скачивает инсталлятор во временную папку и запускает его, затем закрывает
+  /// приложение (чтобы инсталлятор смог перезаписать файлы). Только Windows.
+  /// [onProgress] — доля загрузки 0..1 (если сервер отдал Content-Length).
+  Future<void> downloadAndRun(
+    UpdateInfo info, {
+    void Function(double progress)? onProgress,
+  }) async {
+    if (!Platform.isWindows) {
+      throw Exception('Авто-установка поддерживается только на Windows');
+    }
+    final client = http.Client();
+    try {
+      final req = http.Request('GET', Uri.parse(info.downloadUrl));
+      final resp = await client.send(req).timeout(const Duration(minutes: 5));
+      if (resp.statusCode != 200) {
+        throw Exception('Загрузка: HTTP ${resp.statusCode}');
+      }
+      final total = resp.contentLength ?? 0;
+      final file = File(
+          '${Directory.systemTemp.path}\\LightningMcQueen-Setup-${info.version}.exe');
+      final sink = file.openWrite();
+      var received = 0;
+      await for (final chunk in resp.stream) {
+        received += chunk.length;
+        sink.add(chunk);
+        if (total > 0 && onProgress != null) onProgress(received / total);
+      }
+      await sink.flush();
+      await sink.close();
+
+      // запускаем инсталлятор отдельным процессом (он сам поднимет UAC) и выходим
+      await Process.start(file.path, const [],
+          mode: ProcessStartMode.detached);
+      await Future.delayed(const Duration(milliseconds: 600));
+      exit(0);
+    } finally {
+      client.close();
+    }
+  }
+
   static bool _isNewer(String a, String b) {
     List<int> parse(String v) =>
         v.split('.').map((s) => int.tryParse(s) ?? 0).toList();

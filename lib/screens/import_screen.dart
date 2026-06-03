@@ -24,6 +24,7 @@ class _ImportScreenState extends State<ImportScreen> {
   String? _error;
   VpnProfile? _parsed;
   List<VpnProfile>? _batch;
+  SubUserInfo? _batchInfo;
   bool _loading = false;
 
   String? _pickedFileName;
@@ -71,6 +72,7 @@ class _ImportScreenState extends State<ImportScreen> {
     setState(() {
       _parsed = result.profile;
       _batch = result.batch;
+      _batchInfo = result.subInfo;
       _error = result.error;
       _loading = false;
     });
@@ -130,6 +132,10 @@ class _ImportScreenState extends State<ImportScreen> {
     String? msg;
     if (_batch != null) {
       final added = await vpn.addProfiles(_batch!);
+      final url = _batch!.isNotEmpty ? _batch!.first.subscriptionUrl : null;
+      if (url != null && _batchInfo != null) {
+        await vpn.setSubInfo(url, _batchInfo!);
+      }
       if (added == 0) {
         msg = s.keyAlreadyExists;
       } else if (added < _batch!.length) {

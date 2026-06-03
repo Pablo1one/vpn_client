@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/profile.dart';
 import '../services/log_service.dart';
 import '../services/profile_repository.dart';
+import '../services/route_cleanup_service.dart';
 import '../services/speed_service.dart';
 import '../services/vpn_service.dart';
 import '../services/warp_service.dart';
@@ -58,6 +59,8 @@ class VpnProvider extends ChangeNotifier {
   final _countryFetching = <String>{};
   String? _activeCountryCode;
   final _refreshing = <String>{};  // urls currently being refreshed
+  final Map<String, SubUserInfo> _subInfo = {}; // трафик/срок по url подписки
+  final _routeCleanup = RouteCleanupService(); // очистка чужих маршрутов в обход VPN
 
   List<String>? _cachedRuCidrs;
   List<String>? _cachedBypassAllowedIps;
@@ -95,6 +98,9 @@ class VpnProvider extends ChangeNotifier {
       _status == VpnStatus.connecting || _status == VpnStatus.disconnecting;
   String? get activeCountryCode => _activeCountryCode;
   bool isRefreshing(String url) => _refreshing.contains(url);
+  SubUserInfo? subInfoForUrl(String? url) =>
+      url == null ? null : _subInfo[url];
+  SubUserInfo? get activeSubInfo => subInfoForUrl(_activeProfile?.subscriptionUrl);
 
   Future<void> init() async {
     try {
@@ -164,6 +170,14 @@ class VpnProvider extends ChangeNotifier {
     _warpCascade = prefs.getBool('warpCascade') ?? false;
     _blockAds = prefs.getBool('blockAds') ?? false;
     _subRefreshHours = prefs.getInt('subRefreshHours') ?? 12;
+    final subInfoRaw = prefs.getString('subInfo');
+    if (subInfoRaw != null) {
+      try {
+        final m = jsonDecode(subInfoRaw) as Map<String, dynamic>;
+        m.forEach((k, v) =>
+            _subInfo[k] = SubUserInfo.fromJson(v as Map<String, dynamic>));
+      } catch (_) {}
+    }
     if (Platform.isWindows) _launchOnStartup = await _readStartupEnabled();
     _routingMode = RoutingMode.values.firstWhere(
       (m) => m.name == (prefs.getString('routingMode') ?? 'fullVpn'),
@@ -297,6 +311,12 @@ class VpnProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final profile = _activeProfile!;
+
+      // в режиме «весь трафик через VPN» вычищаем чужие маршруты в обход туннеля
+      // (split-tunnel сторонних VPN добавляет тысячи RU-подсетей на шлюз → утечка)
+      if (_routingMode == RoutingMode.fullVpn && Platform.isWindows) {
+        await _routeCleanup.cleanBypassRoutes();
+      }
 
       // WARP-каскад (opt-in): выход через Cloudflare поверх нашего сервера.
       // Для AWG не поддерживается (системный WG). Когда выключен — обычный коннект.
@@ -553,6 +573,33 @@ class VpnProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Пингует все ключи и подключается к самому быстрому (наименьший ping).
+  /// Возвращает выбранный профиль или null, если ни один недоступен.
+  Future<VpnProfile?> connectFastest() async {
+    if (_profiles.isEmpty) return null;
+    await pingAll();
+    VpnProfile? best;
+    int bestMs = 1 << 30;
+    for (final p in _profiles) {
+      final ms = _pingResults[p.id];
+      if (ms != null && ms < bestMs) {
+        bestMs = ms;
+        best = p;
+      }
+    }
+    if (best == null) return null;
+    LogService().add('[fastest] выбран ${best.name} (${bestMs} мс)');
+    await selectProfile(best); // selectProfile сам переподключит, если был коннект
+    if (_status != VpnStatus.connected && _status != VpnStatus.connecting) {
+      await connect();
+    }
+    return best;
+  }
+
+  /// Удаляет чужие маршруты в обход VPN (ручной вызов из настроек).
+  /// Возвращает число удалённых маршрутов.
+  Future<int> cleanBypassRoutes() => _routeCleanup.cleanBypassRoutes();
+
   Future<void> disconnect() async {
     if (!_switching) _userWantsConnected = false; // ручной дисконнект — не реконнектим
     _warpActive = false;
@@ -646,12 +693,29 @@ class VpnProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> _saveSubInfo() async {
+    final prefs = await SharedPreferences.getInstance();
+    final m = _subInfo.map((k, v) => MapEntry(k, v.toJson()));
+    await prefs.setString('subInfo', jsonEncode(m));
+  }
+
+  /// Сохранить данные подписки сразу при импорте (без ожидания авто-обновления).
+  Future<void> setSubInfo(String url, SubUserInfo info) async {
+    _subInfo[url] = info;
+    await _saveSubInfo();
+    notifyListeners();
+  }
+
   Future<void> refreshSubscription(String url) async {
     if (_refreshing.contains(url)) return;
     _refreshing.add(url);
     notifyListeners();
     try {
       final result = await LinkParser.parseSubscriptionUrl(url);
+      if (result.subInfo != null) {
+        _subInfo[url] = result.subInfo!;
+        await _saveSubInfo();
+      }
       if (result.batch != null && result.batch!.isNotEmpty) {
         final toRemove = _profiles.where((p) => p.subscriptionUrl == url).map((p) => p.id).toList();
         final activeRemoved = toRemove.contains(_activeProfile?.id);

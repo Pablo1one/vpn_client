@@ -10,6 +10,7 @@ import '../utils/config_builder.dart';
 import '../l10n/strings.dart';
 import '../theme.dart';
 import '../widgets/world_map.dart';
+import '../utils/link_parser.dart';
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
@@ -75,6 +76,10 @@ class HomeScreen extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             _RoutingBadge(vpn: vpn),
+            if (vpn.activeSubInfo != null) ...[
+              const SizedBox(height: 8),
+              _SubInfoBadge(info: vpn.activeSubInfo!),
+            ],
             if (vpn.error != null) ...[
               const SizedBox(height: 20),
               Padding(
@@ -607,6 +612,34 @@ class _RoutingBadge extends StatelessWidget {
       child: Text(label,
           style: TextStyle(
               fontSize: 11, color: c.primary, letterSpacing: 0.3)),
+    );
+  }
+}
+
+// ── Остаток трафика / срок подписки ─────────────────────────────────────────
+
+class _SubInfoBadge extends StatelessWidget {
+  final SubUserInfo info;
+  const _SubInfoBadge({required this.info});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ac;
+    final days = info.daysLeft;
+    final parts = <String>['Трафик: ${info.trafficLabel}'];
+    if (days != null) {
+      parts.add(days < 0 ? 'срок истёк' : 'осталось $days дн.');
+    }
+    final expired = days != null && days < 0;
+    final color = expired ? Theme.of(context).colorScheme.error : c.textSecondary;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.data_usage_rounded, size: 13, color: color),
+        const SizedBox(width: 6),
+        Text(parts.join('  •  '),
+            style: TextStyle(fontSize: 11.5, color: color, letterSpacing: 0.2)),
+      ],
     );
   }
 }
