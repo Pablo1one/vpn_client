@@ -10,7 +10,9 @@ class UpdateInfo {
 }
 
 class UpdateService {
-  static const _repo = 'Pablo1one/vpn_client';
+  // публичный репозиторий только с релизами (инсталлеры) — код приватный, а
+  // GitHub API /releases/latest у приватного репо без токена отдаёт 404
+  static const _repo = 'Pablo1one/vpn_client_releases';
   static const releasesUrl = 'https://github.com/$_repo/releases/latest';
   static const _apiUrl = 'https://api.github.com/repos/$_repo/releases/latest';
 
