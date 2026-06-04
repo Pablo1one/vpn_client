@@ -57,9 +57,18 @@ class ConfigBuilder {
     if (mux) outbound['multiplex'] = _singboxMux();
 
     final serverAddress = profile.config['server'] as String? ?? '';
+    // sniff и hijack-dns — ПЕРВЫМИ: иначе DNS-пакеты на приватный адрес туннеля
+    // (172.19.0.2:53) матчатся на ip_is_private → direct раньше перехвата → DNS не
+    // резолвится и страницы не грузятся
     final rules = <Map<String, dynamic>>[
-      {'ip_is_private': true, 'outbound': 'direct'},
+      {'action': 'sniff'},
+      {'action': 'hijack-dns', 'protocol': 'dns'},
     ];
+    // блокировка рекламы: режем домены из geosite-ads (после sniff — домен известен)
+    if (adsRuleSet != null) {
+      rules.add({'rule_set': ['geosite-ads'], 'action': 'reject'});
+    }
+    rules.add({'ip_is_private': true, 'outbound': 'direct'});
     if (serverAddress.isNotEmpty) {
       final isIp = RegExp(r'^\d{1,3}(\.\d{1,3}){3}$').hasMatch(serverAddress);
       rules.add({
@@ -71,12 +80,6 @@ class ConfigBuilder {
     if (bypassApps.isNotEmpty) {
       rules.add({'process_name': bypassApps, 'outbound': 'direct'});
     }
-    rules.add({'action': 'sniff'});
-    // блокировка рекламы: режем домены из geosite-ads (после sniff — домен известен)
-    if (adsRuleSet != null) {
-      rules.add({'rule_set': ['geosite-ads'], 'action': 'reject'});
-    }
-    rules.add({'action': 'hijack-dns', 'protocol': 'dns'});
     if (routingMode == RoutingMode.russiaBypass && ruCidrs.isNotEmpty) {
       rules.add({'ip_cidr': ruCidrs, 'outbound': 'direct'});
     }

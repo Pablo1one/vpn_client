@@ -60,6 +60,7 @@ class SingBoxVpnService : VpnService(), PlatformInterface {
                 statusListener?.invoke("connecting")
                 Thread {
                     runCatching { startBox(config) }.onFailure {
+                        android.util.Log.e("SingBoxVpn", "startBox failed", it)
                         statusListener?.invoke("error: ${it.message}")
                         stopBox()
                     }
@@ -80,9 +81,12 @@ class SingBoxVpnService : VpnService(), PlatformInterface {
             Libbox.setMemoryLimit(true)
             setupDone = true
         }
+        android.util.Log.i("SingBoxVpn", "newService, config ${config.length} байт")
         val service = Libbox.newService(config, this)
+        android.util.Log.i("SingBoxVpn", "service.start()")
         service.start()
         boxService = service
+        android.util.Log.i("SingBoxVpn", "started OK")
         statusListener?.invoke("connected")
     }
 
@@ -125,8 +129,10 @@ class SingBoxVpnService : VpnService(), PlatformInterface {
         }
 
         builder.setBlocking(false)
+        android.util.Log.i("SingBoxVpn", "openTun: establish()")
         val pfd = builder.establish() ?: throw IllegalStateException("VpnService.establish() вернул null")
         tunInterface = pfd
+        android.util.Log.i("SingBoxVpn", "openTun: fd=${pfd.fd}")
         return pfd.fd
     }
 
@@ -178,7 +184,9 @@ class SingBoxVpnService : VpnService(), PlatformInterface {
                     (if (ni.supportsMulticast()) OsConstants.IFF_MULTICAST else 0))
                 setAddresses(StringArrayIterator(
                     ni.interfaceAddresses.mapNotNull { ia ->
-                        ia.address.hostAddress?.let { "$it/${ia.networkPrefixLength}" }
+                        // у IPv6 link-local hostAddress содержит зону (%dummy0) —
+                        // sing-box её в префиксе не принимает (netip.ParsePrefix паникует), срезаем
+                        ia.address.hostAddress?.substringBefore('%')?.let { "$it/${ia.networkPrefixLength}" }
                     }))
             }
         }
