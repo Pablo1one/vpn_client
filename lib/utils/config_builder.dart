@@ -41,6 +41,7 @@ class ConfigBuilder {
     bool tfo = false,
     Map<String, dynamic>? warp, // WARP-каскад: выход через Cloudflare поверх сервера
     List<String> bypassApps = const [], // split-tunnel: эти процессы идут напрямую
+    List<String> excludeApps = const [], // android: пакеты мимо VPN (tun exclude_package)
     String? adsRuleSet, // путь к geosite-ads .srs (блокировка рекламы), null = выкл
   }) {
     final dnsAddr = dns.trim().isEmpty ? '8.8.8.8' : dns.trim();
@@ -121,6 +122,8 @@ class ConfigBuilder {
           'auto_route': true,
           'strict_route': killSwitch,
           'stack': 'mixed',
+          // android split-tunnel: выбранные пакеты идут мимо VPN
+          if (excludeApps.isNotEmpty) 'exclude_package': excludeApps,
         },
       ],
       'outbounds': [

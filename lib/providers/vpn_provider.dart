@@ -486,6 +486,7 @@ class VpnProvider extends ChangeNotifier {
         tfo: _tfo,
         warp: warpJson,
         bypassApps: _bypassApps,
+        excludeApps: _excludedApps, // android split-tunnel → tun exclude_package
         adsRuleSet: _adsRuleSet,
       );
       await _vpn.connect(
