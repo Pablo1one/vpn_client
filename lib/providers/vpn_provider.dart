@@ -993,7 +993,7 @@ class VpnProvider extends ChangeNotifier {
   Future<List<Map<String, String>>> getInstalledApps() async {
     if (!Platform.isAndroid) return [];
     try {
-      const ch = MethodChannel('com.example.vpn_client/vpn');
+      const ch = MethodChannel('lightningmcqueen.proxy/vpn');
       final raw =
           await ch.invokeListMethod<Map<Object?, Object?>>('getInstalledApps');
       return (raw ?? [])

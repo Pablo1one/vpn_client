@@ -1,4 +1,4 @@
-package com.example.vpn_client
+package lightningmcqueen.proxy
 
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine

@@ -1,4 +1,4 @@
-package com.example.vpn_client
+package lightningmcqueen.proxy
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -18,8 +18,8 @@ import androidx.core.app.NotificationCompat
 class SingBoxVpnService : VpnService() {
 
     companion object {
-        const val ACTION_CONNECT    = "com.example.vpn_client.CONNECT"
-        const val ACTION_DISCONNECT = "com.example.vpn_client.DISCONNECT"
+        const val ACTION_CONNECT    = "lightningmcqueen.proxy.CONNECT"
+        const val ACTION_DISCONNECT = "lightningmcqueen.proxy.DISCONNECT"
         const val EXTRA_CONFIG      = "config"
         const val EXTRA_EXCLUDED_APPS = "excluded_apps"
 

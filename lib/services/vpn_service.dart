@@ -34,8 +34,8 @@ abstract class VpnService {
 
 // мобильный (android + ios)
 class _MobileVpnService implements VpnService {
-  static const _method = MethodChannel('com.example.vpn_client/vpn');
-  static const _events = EventChannel('com.example.vpn_client/vpn_events');
+  static const _method = MethodChannel('lightningmcqueen.proxy/vpn');
+  static const _events = EventChannel('lightningmcqueen.proxy/vpn_events');
 
   final _controller = StreamController<VpnStatus>.broadcast();
   late final StreamSubscription _sub;

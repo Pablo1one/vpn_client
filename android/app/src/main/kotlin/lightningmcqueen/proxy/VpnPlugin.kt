@@ -1,4 +1,4 @@
-package com.example.vpn_client
+package lightningmcqueen.proxy
 
 import android.app.Activity
 import android.content.Intent
@@ -11,8 +11,8 @@ import io.flutter.plugin.common.PluginRegistry
 
 object VpnPlugin : PluginRegistry.ActivityResultListener {
 
-    private const val METHOD_CH = "com.example.vpn_client/vpn"
-    private const val EVENT_CH  = "com.example.vpn_client/vpn_events"
+    private const val METHOD_CH = "lightningmcqueen.proxy/vpn"
+    private const val EVENT_CH  = "lightningmcqueen.proxy/vpn_events"
     private const val VPN_REQ   = 0xF1
 
     private var activity: Activity? = null
