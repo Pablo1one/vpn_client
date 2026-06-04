@@ -1,7 +1,7 @@
 name: vpn_client
 description: VPN client — Windows, Android, iOS
 publish_to: none
-version: 1.0.3+4
+version: 1.0.4+5
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -24,6 +24,16 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.14.1
+
+# иконка LightningMcQueen для Android (молния): foreground с отступом + белый фон
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "tool/android_legacy.png"
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "tool/android_fg.png"
+  min_sdk_android: 21
 
 flutter:
   uses-material-design: true

@@ -12,7 +12,30 @@ void main() {
   // превью для визуальной проверки (крупное и размер таскбара)
   File('tool/icon_preview.png').writeAsBytesSync(_encodePng(256, _renderBolt(256)));
   File('tool/icon_preview48.png').writeAsBytesSync(_encodePng(48, _renderBolt(48)));
-  print('app_icon.ico written (${sizes.join(", ")} px) + tool/icon_preview.png');
+
+  // источники для Android (flutter_launcher_icons):
+  // foreground — болт с отступом (центр ~64%, чтобы adaptive-маска не обрезала), фон прозрачный
+  File('tool/android_fg.png').writeAsBytesSync(_encodePng(512, _renderBoltCanvas(512, 0.64, 0)));
+  // legacy/квадратная иконка — болт крупнее на белом фоне
+  File('tool/android_legacy.png').writeAsBytesSync(_encodePng(512, _renderBoltCanvas(512, 0.80, 0xFFFFFFFF)));
+  print('app_icon.ico + превью + tool/android_fg.png + tool/android_legacy.png');
+}
+
+// Болт в холсте canvas×canvas: масштаб scale (доля холста), центрирован, фон bg (0 = прозрачный).
+Uint32List _renderBoltCanvas(int canvas, double scale, int bg) {
+  final out = Uint32List(canvas * canvas);
+  if (bg != 0) for (var i = 0; i < out.length; i++) out[i] = bg;
+  final bolt = (canvas * scale).round();
+  final bp = _renderBolt(bolt);
+  final off = (canvas - bolt) ~/ 2;
+  for (var y = 0; y < bolt; y++) {
+    for (var x = 0; x < bolt; x++) {
+      final p = bp[y * bolt + x];
+      if (((p >> 24) & 0xFF) == 0) continue; // прозрачные пиксели болта — оставляем фон
+      out[(y + off) * canvas + (x + off)] = p;
+    }
+  }
+  return out;
 }
 
 // ── Минимальный PNG-энкодер (RGBA, deflate stored) ───────────────────────────

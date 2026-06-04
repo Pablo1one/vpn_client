@@ -44,3 +44,6 @@ assets/bin/xray.exe
 assets/bin/wintun.dll
 android/app/libs/libbox.aar
 ios/LibBox.xcframework/
+
+# регенерируемые исходники Android-иконки (gen_icon.dart)
+tool/android_*.png
