@@ -3,6 +3,8 @@ package lightningmcqueen.proxy
 import android.app.Activity
 import android.content.Intent
 import android.net.VpnService
+import android.os.Handler
+import android.os.Looper
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
@@ -15,6 +17,7 @@ object VpnPlugin : PluginRegistry.ActivityResultListener {
     private const val EVENT_CH  = "lightningmcqueen.proxy/vpn_events"
     private const val VPN_REQ   = 0xF1
 
+    private val mainHandler = Handler(Looper.getMainLooper())
     private var activity: Activity? = null
     private var eventSink: EventChannel.EventSink? = null
     private var pendingConfig: String? = null
@@ -31,7 +34,11 @@ object VpnPlugin : PluginRegistry.ActivityResultListener {
             .setStreamHandler(object : EventChannel.StreamHandler {
                 override fun onListen(args: Any?, sink: EventChannel.EventSink?) {
                     eventSink = sink
-                    SingBoxVpnService.statusListener = { status -> eventSink?.success(status) }
+                    // статусы прилетают из фоновых потоков сервиса/libbox, а flutter-каналы
+                    // можно трогать только с main-потока — маршалим через main handler
+                    SingBoxVpnService.statusListener = { status ->
+                        mainHandler.post { eventSink?.success(status) }
+                    }
                 }
                 override fun onCancel(args: Any?) {
                     SingBoxVpnService.statusListener = null
