@@ -10,11 +10,14 @@ class UpdateInfo {
 }
 
 class UpdateService {
-  // публичный репозиторий только с релизами (инсталлеры) — код приватный, а
-  // GitHub API /releases/latest у приватного репо без токена отдаёт 404
-  static const _repo = 'Pablo1one/vpn_client_releases';
-  static const releasesUrl = 'https://github.com/$_repo/releases/latest';
-  static const _apiUrl = 'https://api.github.com/repos/$_repo/releases/latest';
+  // публичные репо только с релизами (код приватный, а GitHub API /releases/latest
+  // у приватного репо без токена отдаёт 404). Под android — отдельный репо с apk.
+  static String get _repo => Platform.isAndroid
+      ? 'Pablo1one/vpn_client_releases_android'
+      : 'Pablo1one/vpn_client_releases';
+  static String get releasesUrl => 'https://github.com/$_repo/releases/latest';
+  static String get _apiUrl =>
+      'https://api.github.com/repos/$_repo/releases/latest';
 
   Future<String> currentVersion() async {
     final info = await PackageInfo.fromPlatform();
