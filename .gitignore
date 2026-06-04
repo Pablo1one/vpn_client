@@ -47,3 +47,7 @@ ios/LibBox.xcframework/
 
 # регенерируемые исходники Android-иконки (gen_icon.dart)
 tool/android_*.png
+
+# android release signing (НЕ коммитить — бэкапить отдельно!)
+android/key.properties
+android/app/*.jks
