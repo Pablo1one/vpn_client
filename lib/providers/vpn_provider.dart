@@ -475,11 +475,17 @@ class VpnProvider extends ChangeNotifier {
       );
     } else {
       // Mobile (and any other platform): single sing-box with full config
+      // в режиме «Россия напрямую» грузим российские подсети (иначе правило
+      // ip_cidr→direct не добавится и режим не работает)
+      final ruCidrs = _routingMode == RoutingMode.russiaBypass
+          ? await _loadRuCidrs()
+          : <String>[];
       final config = ConfigBuilder.build(
         profile,
         routingMode: _routingMode,
         killSwitch: _killSwitch,
         bypassDomains: _bypassDomains,
+        ruCidrs: ruCidrs,
         mux: _mux,
         dns: _dns,
         allowInsecure: _allowInsecure,

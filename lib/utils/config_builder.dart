@@ -84,6 +84,10 @@ class ConfigBuilder {
     if (routingMode == RoutingMode.russiaBypass && ruCidrs.isNotEmpty) {
       rules.add({'ip_cidr': ruCidrs, 'outbound': 'direct'});
     }
+    // custom: пользовательские домены мимо VPN (напрямую)
+    if (bypassDomains.isNotEmpty) {
+      rules.add({'domain_suffix': bypassDomains, 'outbound': 'direct'});
+    }
 
     return {
       'log': {'level': 'info'},
