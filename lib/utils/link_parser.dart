@@ -247,7 +247,10 @@ class LinkParser {
               'sid': (tls['reality'] as Map?)?['short_id'] ?? '',
               'flow': item['flow'] ?? '',
               'path': transport['path'] ?? '/',
-              'host': (transport['headers'] as Map?)?['Host'] ?? server,
+              // xhttp хранит host прямым полем, ws — в headers.Host
+              'host': transport['host'] ??
+                  (transport['headers'] as Map?)?['Host'] ?? server,
+              if (transportType == 'xhttp') 'mode': transport['mode'] ?? 'auto',
               if (transportType == 'grpc')
                 'serviceName': transport['service_name'] ?? '',
             },
@@ -326,9 +329,13 @@ class LinkParser {
           'flow': q['flow'] ?? '',
           if (transport == 'grpc')
             'serviceName': q['serviceName'] ?? q['grpcServiceName'] ?? '',
-          if (transport == 'httpupgrade' || transport == 'http' ||
-              transport == 'xhttp')
+          if (transport == 'httpupgrade' || transport == 'http')
             'path': q['path'] ?? '/',
+          if (transport == 'xhttp') ...{
+            'path': q['path'] ?? '/',
+            'host': q['host'] ?? q['sni'] ?? uri.host,
+            'mode': q['mode'] ?? 'auto',
+          },
           if (transport == 'ws') ...{
             'path': q['path'] ?? '/',
             'host': q['host'] ?? uri.host,

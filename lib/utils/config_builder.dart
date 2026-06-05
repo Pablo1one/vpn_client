@@ -734,10 +734,12 @@ class ConfigBuilder {
           'service_name': c['serviceName'] ?? '',
         };
       case 'xhttp':
+        // формат как в sing-box (форк amnezia-box с портом xhttp): mode/host/path
         out['transport'] = {
           'type': 'xhttp',
+          'mode': c['mode'] ?? 'auto',
+          'host': c['host'] ?? c['sni'] ?? c['server'],
           'path': c['path'] ?? '/',
-          'host': c['sni'] ?? c['server'],
         };
       case 'httpupgrade':
       case 'http':
