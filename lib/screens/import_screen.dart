@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -88,19 +89,27 @@ class _ImportScreenState extends State<ImportScreen> {
   }
 
   Future<void> _pickFile() async {
+    // на Android/iOS у .conf нет MIME-типа → FileType.custom не открывает пикер;
+    // берём любой файл и валидируем по содержимому. withData — чтобы читать bytes
+    // (на Android путь часто content:// с null path)
+    final mobile = Platform.isAndroid || Platform.isIOS;
     final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['conf'],
+      type: mobile ? FileType.any : FileType.custom,
+      allowedExtensions: mobile ? null : ['conf'],
       allowMultiple: false,
+      withData: true,
     );
     if (result == null || result.files.isEmpty) return;
 
     final file = result.files.first;
-    final path = file.path;
-    if (path == null) return;
-
     try {
-      final content = await File(path).readAsString();
+      final content = file.bytes != null
+          ? utf8.decode(file.bytes!, allowMalformed: true)
+          : (file.path != null ? await File(file.path!).readAsString() : null);
+      if (content == null) {
+        setState(() => _error = 'Не удалось прочитать файл');
+        return;
+      }
       _ctrl.clear();
       setState(() {
         _pickedFileName = file.name;

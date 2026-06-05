@@ -4,7 +4,6 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
@@ -14,23 +13,26 @@ import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.system.OsConstants
 import androidx.core.app.NotificationCompat
-import io.nekohasekai.libbox.BoxService
+import io.nekohasekai.libbox.CommandServer
+import io.nekohasekai.libbox.CommandServerHandler
+import io.nekohasekai.libbox.ConnectionOwner
 import io.nekohasekai.libbox.InterfaceUpdateListener
 import io.nekohasekai.libbox.Libbox
 import io.nekohasekai.libbox.LocalDNSTransport
 import io.nekohasekai.libbox.NetworkInterfaceIterator
+import io.nekohasekai.libbox.OverrideOptions
 import io.nekohasekai.libbox.PlatformInterface
 import io.nekohasekai.libbox.SetupOptions
 import io.nekohasekai.libbox.StringIterator
+import io.nekohasekai.libbox.SystemProxyStatus
 import io.nekohasekai.libbox.TunOptions
 import io.nekohasekai.libbox.WIFIState
 import java.net.InetSocketAddress
 
-// vpn-сервис на базе libbox (sing-box). реализует PlatformInterface: libbox сам
-// зовёт openTun, мы строим туннель из TunOptions и отдаём fd. наружу шлём статусы.
-// акроним-методы libbox (getMTU, getDNSServerAddress) зовём явно — property-синтаксис
-// kotlin их мапит непредсказуемо
-class SingBoxVpnService : VpnService(), PlatformInterface {
+// vpn-сервис на libbox (sing-box, форк amnezia-box 1.13). В 1.13 движок гоняется через
+// CommandServer (startOrReloadService/closeService) + CommandServerHandler, а не BoxService.
+// Реализуем PlatformInterface (openTun из TunOptions, монитор) и CommandServerHandler.
+class SingBoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
 
     companion object {
         const val ACTION_CONNECT    = "lightningmcqueen.proxy.CONNECT"
@@ -45,10 +47,11 @@ class SingBoxVpnService : VpnService(), PlatformInterface {
         @Volatile private var setupDone = false
     }
 
-    private var boxService: BoxService? = null
+    private var commandServer: CommandServer? = null
     private var tunInterface: ParcelFileDescriptor? = null
     private var defaultNetwork: Network? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
+    @Volatile private var stopping = false
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
@@ -81,27 +84,39 @@ class SingBoxVpnService : VpnService(), PlatformInterface {
             Libbox.setMemoryLimit(true)
             setupDone = true
         }
-        android.util.Log.i("SingBoxVpn", "newService, config ${config.length} байт")
-        val service = Libbox.newService(config, this)
-        android.util.Log.i("SingBoxVpn", "service.start()")
-        service.start()
-        boxService = service
+        android.util.Log.i("SingBoxVpn", "newCommandServer, config ${config.length} байт")
+        val server = Libbox.newCommandServer(this, this)
+        server.start()
+        android.util.Log.i("SingBoxVpn", "startOrReloadService")
+        server.startOrReloadService(config, OverrideOptions())
+        commandServer = server
         android.util.Log.i("SingBoxVpn", "started OK")
         statusListener?.invoke("connected")
     }
 
     private fun stopBox() {
-        runCatching { boxService?.close() }
-        boxService = null
+        if (stopping) return
+        stopping = true
+        runCatching { commandServer?.closeService() }
+        runCatching { commandServer?.close() }
+        commandServer = null
         runCatching { tunInterface?.close() }
         tunInterface = null
         statusListener?.invoke("disconnected")
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
         stopSelf()
     }
 
     override fun onDestroy() { stopBox(); super.onDestroy() }
     override fun onRevoke() { stopBox() }
+
+    // ── CommandServerHandler ────────────────────────────────────────────────
+    override fun serviceReload() {}
+    override fun serviceStop() { stopBox() }
+    override fun getSystemProxyStatus(): SystemProxyStatus =
+        SystemProxyStatus().apply { available = false; enabled = false }
+    override fun setSystemProxyEnabled(isEnabled: Boolean) {}
+    override fun writeDebugMessage(message: String) { android.util.Log.d("libbox", message) }
 
     // ── PlatformInterface: построение TUN ───────────────────────────────────
     override fun openTun(options: TunOptions): Int {
@@ -154,6 +169,10 @@ class SingBoxVpnService : VpnService(), PlatformInterface {
         }
         networkCallback = cb
         cm.registerNetworkCallback(request, cb)
+        // сразу сообщить текущий дефолт: AWG-endpoint биндит UDP-сокет синхронно на
+        // старте и не может ждать асинхронного onAvailable (иначе падает с
+        // "create ipv4 connection: no available network interface")
+        runCatching { cm.activeNetwork?.let { updateDefault(it, listener) } }
     }
 
     override fun closeDefaultInterfaceMonitor(listener: InterfaceUpdateListener) {
@@ -193,29 +212,28 @@ class SingBoxVpnService : VpnService(), PlatformInterface {
         return NetworkInterfaceArrayIterator(list)
     }
 
-    // ── PlatformInterface: владелец соединения / пакеты ─────────────────────
+    // ── PlatformInterface: владелец соединения (в 1.13 возвращает объект) ────
     override fun useProcFS(): Boolean = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
 
     override fun findConnectionOwner(
         ipProto: Int, srcIp: String, srcPort: Int, destIp: String, destPort: Int
-    ): Int {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) throw UnsupportedOperationException()
-        return getSystemService(ConnectivityManager::class.java).getConnectionOwnerUid(
-            ipProto, InetSocketAddress(srcIp, srcPort), InetSocketAddress(destIp, destPort))
+    ): ConnectionOwner {
+        val owner = ConnectionOwner()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            runCatching {
+                val uid = getSystemService(ConnectivityManager::class.java).getConnectionOwnerUid(
+                    ipProto, InetSocketAddress(srcIp, srcPort), InetSocketAddress(destIp, destPort))
+                owner.userId = uid
+                packageManager.getPackagesForUid(uid)?.let {
+                    // геттер androidPackageNames() без get-префикса → property-синтаксис не работает
+                    owner.setAndroidPackageNames(StringArrayIterator(it.toList()))
+                }
+            }
+        }
+        return owner
     }
 
-    override fun packageNameByUid(uid: Int): String =
-        packageManager.getPackagesForUid(uid)?.firstOrNull() ?: ""
-
-    override fun uidByPackageName(packageName: String): Int =
-        runCatching {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
-                packageManager.getPackageUid(packageName, PackageManager.PackageInfoFlags.of(0))
-            else @Suppress("DEPRECATION") packageManager.getPackageUid(packageName, 0)
-        }.getOrDefault(-1)
-
     // ── PlatformInterface: остальное (минимально) ───────────────────────────
-    override fun writeLog(message: String) { android.util.Log.i("libbox", message) }
     override fun clearDNSCache() {}
     override fun readWIFIState(): WIFIState? = null
     override fun systemCertificates(): StringIterator = StringArrayIterator(emptyList())

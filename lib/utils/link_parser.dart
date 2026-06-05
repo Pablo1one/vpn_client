@@ -458,7 +458,7 @@ class LinkParser {
       if (eq < 0) continue;
       final key = line.substring(0, eq).trim().toLowerCase();
       final val = line.substring(eq + 1).trim();
-      if ({'jc', 'jmin', 'jmax', 's1', 's2', 's3', 's4', 'h1', 'h2', 'h3', 'h4'}
+      if ({'jc', 'jmin', 'jmax', 's1', 's2', 's3', 's4', 'h1', 'h2', 'h3', 'h4', 'i1', 'i2', 'i3', 'i4', 'i5'}
           .contains(key)) {
         out[key] = int.tryParse(val) ?? val;
       }
@@ -493,7 +493,7 @@ class LinkParser {
           : 51820;
 
       // AmneziaWG obfuscation params (Jc, Jmin, Jmax, S1, S2, H1–H4)
-      const awgKeys = {'jc', 'jmin', 'jmax', 's1', 's2', 's3', 's4', 'h1', 'h2', 'h3', 'h4'};
+      const awgKeys = {'jc', 'jmin', 'jmax', 's1', 's2', 's3', 's4', 'h1', 'h2', 'h3', 'h4', 'i1', 'i2', 'i3', 'i4', 'i5'};
       final awgParams = <String, dynamic>{};
       for (final k in awgKeys) {
         final v = data['interface_$k'];

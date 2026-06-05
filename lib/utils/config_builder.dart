@@ -45,17 +45,21 @@ class ConfigBuilder {
     String? adsRuleSet, // путь к geosite-ads .srs (блокировка рекламы), null = выкл
   }) {
     final dnsAddr = dns.trim().isEmpty ? '8.8.8.8' : dns.trim();
-    final Map<String, dynamic> outbound = switch (profile.protocol) {
-      // dns-direct: резолв адреса сервера напрямую, без петли через proxy
-      VpnProtocol.vless => _singboxVless(profile.config,
-          allowInsecure: allowInsecure, tfo: tfo)
-        ..['domain_resolver'] = {'server': 'dns-direct', 'strategy': 'prefer_ipv4'},
-      VpnProtocol.tuic => _tuic(profile.config, allowInsecure: allowInsecure),
-      VpnProtocol.hysteria2 =>
-        _hysteria2(profile.config, allowInsecure: allowInsecure),
-      _ => throw ArgumentError('build: unsupported protocol ${profile.protocol}'),
-    };
-    if (mux) outbound['multiplex'] = _singboxMux();
+    // AmneziaWG идёт endpoint'ом (форк amnezia-box), у остальных — обычный outbound
+    final isAwg = profile.protocol == VpnProtocol.amnezia;
+    final Map<String, dynamic>? outbound = isAwg
+        ? null
+        : switch (profile.protocol) {
+            // dns-direct: резолв адреса сервера напрямую, без петли через proxy
+            VpnProtocol.vless => _singboxVless(profile.config,
+                allowInsecure: allowInsecure, tfo: tfo)
+              ..['domain_resolver'] = {'server': 'dns-direct', 'strategy': 'prefer_ipv4'},
+            VpnProtocol.tuic => _tuic(profile.config, allowInsecure: allowInsecure),
+            VpnProtocol.hysteria2 =>
+              _hysteria2(profile.config, allowInsecure: allowInsecure),
+            _ => throw ArgumentError('build: unsupported protocol ${profile.protocol}'),
+          };
+    if (mux && outbound != null) outbound['multiplex'] = _singboxMux();
 
     final serverAddress = profile.config['server'] as String? ?? '';
     // sniff и hijack-dns — ПЕРВЫМИ: иначе DNS-пакеты на приватный адрес туннеля
@@ -131,15 +135,19 @@ class ConfigBuilder {
         },
       ],
       'outbounds': [
-        outbound,
+        if (outbound != null) outbound,
         {
           'type': 'direct',
           'tag': 'direct',
         },
       ],
-      // WARP-каскад: endpoint дозванивается до Cloudflare ЧЕРЕЗ proxy (наш сервер),
-      // финал маршрута → warp. Когда warp == null — секции нет, всё как обычно.
-      if (warp != null) 'endpoints': [_warpEndpoint(warp, detour: 'proxy')],
+      // endpoints: WARP-каскад (дозвон до Cloudflare через proxy) и/или AmneziaWG.
+      // у AWG endpoint tag 'proxy' → финал маршрута на него.
+      if (warp != null || isAwg)
+        'endpoints': [
+          if (warp != null) _warpEndpoint(warp, detour: 'proxy'),
+          if (isAwg) _awgEndpoint(profile.config),
+        ],
       'route': {
         'auto_detect_interface': true,
         'final': warp != null ? 'warp' : 'proxy',
@@ -622,6 +630,50 @@ class ConfigBuilder {
       ],
       'detour': detour,
     };
+  }
+
+  // AmneziaWG endpoint (форк amnezia-box, type=awg). Маршрутизацию решает sing-box
+  // (route rules), поэтому allowed_ips = 0.0.0.0/0; obfuscation-параметры из профиля.
+  static Map<String, dynamic> _awgEndpoint(Map<String, dynamic> c) {
+    int? asInt(String k) => int.tryParse('${c[k] ?? ''}');
+    String? asStr(String k) {
+      final v = c[k]?.toString();
+      return (v != null && v.isNotEmpty) ? v : null;
+    }
+
+    final psk = (c['presharedKey'] as String? ?? '').trim();
+    final ep = <String, dynamic>{
+      'type': 'awg',
+      'tag': 'proxy',
+      'private_key': c['privateKey'],
+      'address': (c['address'] as String? ?? '')
+          .split(',')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList(),
+      'mtu': asInt('mtu') ?? 1280,
+      'peers': [
+        {
+          'address': c['server'],
+          'port': asInt('port') ?? 0,
+          'public_key': c['publicKey'],
+          if (psk.isNotEmpty) 'preshared_key': psk,
+          'allowed_ips': ['0.0.0.0/0'],
+          'persistent_keepalive_interval':
+              asInt('persistentKeepalive') ?? asInt('keepalive') ?? 25,
+        },
+      ],
+    };
+    // обфускация: только присутствующие параметры (omitempty на стороне sing-box)
+    for (final k in ['jc', 'jmin', 'jmax', 's1', 's2', 's3', 's4']) {
+      final v = asInt(k);
+      if (v != null && v != 0) ep[k] = v;
+    }
+    for (final k in ['h1', 'h2', 'h3', 'h4', 'i1', 'i2', 'i3', 'i4', 'i5']) {
+      final v = asStr(k);
+      if (v != null) ep[k] = v;
+    }
+    return ep;
   }
 
   // sing-box multiplex (требует поддержки на сервере)
