@@ -57,6 +57,14 @@ android {
                 signingConfigs.getByName("release")
             else
                 signingConfigs.getByName("debug")
+            // R8: обфускация + шринк (затрудняет вскрытие APK). keep-правила для
+            // libbox/gomobile/Flutter в proguard-rules.pro — без них ломается JNI
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 }

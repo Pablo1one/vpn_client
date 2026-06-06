@@ -69,6 +69,10 @@ class SingBoxVpnService : VpnService(), PlatformInterface, CommandServerHandler 
     private var notifCountry = ""        // ISO-код страны (для эмодзи-флага)
     private var statusClient: CommandClient? = null
     @Volatile private var connectedNow = false
+    // логи движка в logcat — только на debug-сборках (в release не светим домены/DNS)
+    private val isDebuggable by lazy {
+        (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
@@ -167,7 +171,9 @@ class SingBoxVpnService : VpnService(), PlatformInterface, CommandServerHandler 
         runCatching {
             val opts = CommandClientOptions()
             opts.addCommand(Libbox.CommandStatus)
-            opts.addCommand(Libbox.CommandLog) // логи движка → logcat (тег boxlog) для диагностики
+            // логи движка → logcat (тег boxlog) только на debug-сборках: в release не
+            // светим домены/DNS в logcat
+            if (isDebuggable) opts.addCommand(Libbox.CommandLog)
             opts.statusInterval = 1_000_000_000L // 1 c в наносекундах
             val client = Libbox.newCommandClient(StatusHandler(), opts)
             client.connect()
