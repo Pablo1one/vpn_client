@@ -89,7 +89,12 @@ class SingBoxVpnService : VpnService(), PlatformInterface, CommandServerHandler 
                     }
                 }.start()
             }
-            ACTION_DISCONNECT -> stopBox()
+            ACTION_DISCONNECT -> {
+                // кнопка «Отключить» в шторке — пользовательская остановка: сообщаем
+                // Flutter ("userstop"), чтобы он сбросил _userWantsConnected и НЕ реконнектил
+                notifyStatus("userstop")
+                stopBox()
+            }
         }
         return START_STICKY
     }

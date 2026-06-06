@@ -12,6 +12,9 @@ abstract class VpnService {
   static const kAwgTunnelName = 'vpnclient_awg';
 
   Stream<VpnStatus> get statusStream;
+  // вызывается когда дисконнект инициирован вне UI (кнопка «Отключить» в шторке
+  // Android) — провайдер сбрасывает флаг авто-реконнекта, чтобы не переподключаться
+  set onUserStop(void Function()? cb);
   Future<void> connect(String singboxConfigJson,
       {List<String> excludedApps = const [],
       String protocol = '',
@@ -42,9 +45,20 @@ class _MobileVpnService implements VpnService {
   final _controller = StreamController<VpnStatus>.broadcast();
   late final StreamSubscription _sub;
 
+  @override
+  void Function()? onUserStop;
+
   _MobileVpnService() {
     _sub = _events.receiveBroadcastStream().listen(
-      (event) => _controller.add(_parse(event as String)),
+      (event) {
+        final s = event as String;
+        // пользовательская остановка из шторки — отдельное событие, не статус
+        if (s == 'userstop') {
+          onUserStop?.call();
+          return;
+        }
+        _controller.add(_parse(s));
+      },
       onError: (_) => _controller.add(VpnStatus.error),
     );
   }
@@ -100,6 +114,9 @@ class _MobileVpnService implements VpnService {
 // windows — прокси (xray или singbox) на порту 10808 плюс tun форвардер
 class _WindowsVpnService implements VpnService {
   final _controller = StreamController<VpnStatus>.broadcast();
+
+  @override
+  void Function()? onUserStop; // на Windows нет нативной кнопки в шторке — не используется
 
   Process? _process;         // tun singbox
   StreamSubscription? _outSub;

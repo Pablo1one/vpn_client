@@ -106,6 +106,10 @@ class VpnProvider extends ChangeNotifier {
   Future<void> init() async {
     try {
       _vpn = VpnService.create();
+      // кнопка «Отключить» в шторке Android — пользовательский дисконнект, без реконнекта
+      _vpn.onUserStop = () {
+        _userWantsConnected = false;
+      };
       if (Platform.isWindows) await _vpn.cleanup();
       _vpn.statusStream.listen((s) {
         // при смене сервера/протокола не мигаем серым промежуточным статусом —
