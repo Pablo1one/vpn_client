@@ -22,6 +22,8 @@ object VpnPlugin : PluginRegistry.ActivityResultListener {
     private var eventSink: EventChannel.EventSink? = null
     private var pendingConfig: String? = null
     private var pendingExcludedApps: List<String> = emptyList()
+    private var pendingProtocol: String = ""
+    private var pendingCountry: String = ""
     private var pendingResult: MethodChannel.Result? = null
 
     fun register(activity: Activity, engine: FlutterEngine) {
@@ -39,6 +41,9 @@ object VpnPlugin : PluginRegistry.ActivityResultListener {
                     SingBoxVpnService.statusListener = { status ->
                         mainHandler.post { eventSink?.success(status) }
                     }
+                    // при пересоздании активити (тап по уведомлению) UI подписывается заново —
+                    // сразу отдаём текущий статус сервиса, иначе он считает что отключено
+                    mainHandler.post { eventSink?.success(SingBoxVpnService.currentStatus) }
                 }
                 override fun onCancel(args: Any?) {
                     SingBoxVpnService.statusListener = null
@@ -53,14 +58,18 @@ object VpnPlugin : PluginRegistry.ActivityResultListener {
                 val config = call.argument<String>("config")
                     ?: return result.error("INVALID_ARG", "config required", null)
                 val excludedApps = call.argument<List<String>>("excludedApps") ?: emptyList()
+                val protocol = call.argument<String>("protocol") ?: ""
+                val country = call.argument<String>("country") ?: ""
                 val intent = VpnService.prepare(activity)
                 if (intent != null) {
                     pendingConfig = config
                     pendingExcludedApps = excludedApps
+                    pendingProtocol = protocol
+                    pendingCountry = country
                     pendingResult = result
                     activity?.startActivityForResult(intent, VPN_REQ)
                 } else {
-                    startService(config, excludedApps)
+                    startService(config, excludedApps, protocol, country)
                     result.success(null)
                 }
             }
@@ -95,22 +104,31 @@ object VpnPlugin : PluginRegistry.ActivityResultListener {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
         if (requestCode != VPN_REQ) return false
         if (resultCode == Activity.RESULT_OK) {
-            pendingConfig?.let { startService(it, pendingExcludedApps) }
+            pendingConfig?.let { startService(it, pendingExcludedApps, pendingProtocol, pendingCountry) }
             pendingResult?.success(null)
         } else {
             pendingResult?.error("PERMISSION_DENIED", "VPN permission denied", null)
         }
         pendingConfig = null
         pendingExcludedApps = emptyList()
+        pendingProtocol = ""
+        pendingCountry = ""
         pendingResult = null
         return true
     }
 
-    private fun startService(config: String, excludedApps: List<String>) {
+    private fun startService(
+        config: String,
+        excludedApps: List<String>,
+        protocol: String,
+        country: String,
+    ) {
         activity?.startService(
             Intent(activity, SingBoxVpnService::class.java)
                 .setAction(SingBoxVpnService.ACTION_CONNECT)
                 .putExtra(SingBoxVpnService.EXTRA_CONFIG, config)
+                .putExtra(SingBoxVpnService.EXTRA_PROTOCOL, protocol)
+                .putExtra(SingBoxVpnService.EXTRA_COUNTRY, country)
                 .putStringArrayListExtra(
                     SingBoxVpnService.EXTRA_EXCLUDED_APPS,
                     ArrayList(excludedApps)

@@ -132,23 +132,6 @@ class SettingsScreen extends StatelessWidget {
           ),
           const Divider(height: 1),
 
-          // ── Per-app (Android only) ───────────────────────────────────────
-          if (Platform.isAndroid) ...[
-            _SectionHeader(s.perApp),
-            ListTile(
-              title: Text(s.excludedApps),
-              subtitle: Text(
-                vpn.excludedApps.isEmpty
-                    ? s.noExcludedApps
-                    : '${vpn.excludedApps.length} app(s)',
-              ),
-              trailing: Icon(Icons.chevron_right,
-                  size: 20, color: context.ac.textMuted),
-              onTap: () => _openAppPicker(context, vpn, s),
-            ),
-            const Divider(height: 1),
-          ],
-
           // ── Theme ────────────────────────────────────────────────────────
           _SectionHeader(s.themeSection),
           _ThemeSelector(s: s),
@@ -191,19 +174,6 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _openAppPicker(
-      BuildContext context, VpnProvider vpn, L10n s) async {
-    final result = await showModalBottomSheet<List<String>>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => _AppPickerSheet(
-        excluded: vpn.excludedApps,
-        loadApps: vpn.getInstalledApps,
-        s: s,
-      ),
-    );
-    if (result != null) vpn.setExcludedApps(result);
-  }
 }
 
 // ── Кастомный DNS ─────────────────────────────────────────────────────────────
@@ -565,7 +535,9 @@ class _RoutingModeSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.ac;
-    final active = vpn.bypassApps.isNotEmpty;
+    // split-tunnel: на Android — exclude_package (excludedApps), на Windows — bypassApps
+    final perApp = Platform.isAndroid ? vpn.excludedApps : vpn.bypassApps;
+    final active = perApp.isNotEmpty;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
       child: Column(
@@ -593,12 +565,14 @@ class _RoutingModeSelector extends StatelessWidget {
             ],
           ),
           // split-tunnel — независимый оверлей (поверх любого режима), не «режим»
-          if (Platform.isWindows) ...[
+          if (Platform.isWindows || Platform.isAndroid) ...[
             const SizedBox(height: 8),
             MouseRegion(
               cursor: SystemMouseCursors.click,
               child: GestureDetector(
-                onTap: () => _openSplitTunnel(context, vpn, s),
+                onTap: () => Platform.isAndroid
+                    ? _openExcludedApps(context, vpn, s)
+                    : _openSplitTunnel(context, vpn, s),
                 child: Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -617,7 +591,7 @@ class _RoutingModeSelector extends StatelessWidget {
                       const SizedBox(width: 8),
                       Text(
                         active
-                            ? '${s.splitTunnelChip} (${vpn.bypassApps.length})'
+                            ? '${s.splitTunnelChip} (${perApp.length})'
                             : s.splitTunnelChip,
                         style: TextStyle(
                           fontSize: 13,
@@ -658,6 +632,21 @@ class _RoutingModeSelector extends StatelessWidget {
       ),
     );
     if (result != null) vpn.setBypassApps(result);
+  }
+
+  // Android: пикер установленных приложений → exclude_package (мимо VPN)
+  Future<void> _openExcludedApps(
+      BuildContext context, VpnProvider vpn, L10n s) async {
+    final result = await showModalBottomSheet<List<String>>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _AppPickerSheet(
+        excluded: vpn.excludedApps,
+        loadApps: vpn.getInstalledApps,
+        s: s,
+      ),
+    );
+    if (result != null) vpn.setExcludedApps(result);
   }
 }
 

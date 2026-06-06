@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/profile.dart';
 import '../services/log_service.dart';
@@ -338,9 +339,9 @@ class VpnProvider extends ChangeNotifier {
       // Для AWG не поддерживается (системный WG). Когда выключен — обычный коннект.
       Map<String, dynamic>? warpJson;
       bool twoPhase = false;
-      final wantWarp = _warpCascade &&
-          Platform.isWindows &&
-          profile.protocol != VpnProtocol.amnezia;
+      // WARP-каскад на Windows и Android (движок sing-box умеет warp-endpoint).
+      // AWG исключаем — каскад поверх системного/awg-туннеля не делаем.
+      final wantWarp = _warpCascade && profile.protocol != VpnProtocol.amnezia;
       if (wantWarp) {
         var warp = await WarpService.loadSaved();
         // нет конфига ИЛИ старый без reserved (client_id) — нужна регистрация
@@ -493,11 +494,13 @@ class VpnProvider extends ChangeNotifier {
         warp: warpJson,
         bypassApps: _bypassApps,
         excludeApps: _excludedApps, // android split-tunnel → tun exclude_package
-        adsRuleSet: _adsRuleSet,
+        adsRuleSet: await _ensureAdsRuleSet(),
       );
       await _vpn.connect(
         ConfigBuilder.toJson(config),
         excludedApps: _excludedApps,
+        protocol: profile.protocolLabel,
+        country: _activeCountryCode ?? '',
       );
     }
   }
@@ -897,6 +900,26 @@ class VpnProvider extends ChangeNotifier {
     if (!_blockAds || !Platform.isWindows) return null;
     final appDir = File(Platform.resolvedExecutable).parent.path;
     return '$appDir\\data\\flutter_assets\\assets\\data\\geosite-ads.srs';
+  }
+
+  // На Android ассет лежит внутри APK — sing-box нужен реальный путь, поэтому
+  // распаковываем geosite-ads.srs в файлы приложения один раз и отдаём путь.
+  String? _cachedAdsPathMobile;
+  Future<String?> _ensureAdsRuleSet() async {
+    if (Platform.isWindows) return _adsRuleSet;
+    if (!_blockAds) return null;
+    if (_cachedAdsPathMobile != null) return _cachedAdsPathMobile;
+    try {
+      final dir = await getApplicationSupportDirectory();
+      final f = File('${dir.path}/geosite-ads.srs');
+      final data = await rootBundle.load('assets/data/geosite-ads.srs');
+      await f.writeAsBytes(data.buffer.asUint8List(), flush: true);
+      _cachedAdsPathMobile = f.path;
+      return f.path;
+    } catch (e) {
+      debugPrint('geosite-ads extract error: $e');
+      return null;
+    }
   }
 
   Future<void> setFragParams({

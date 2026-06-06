@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:cryptography/cryptography.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -112,30 +113,33 @@ class WarpService {
 
   // Генерирует ключевую пару, регистрирует аккаунт WARP (пробует несколько эндпоинтов)
   static Future<WarpConfig> register() async {
-    final binDir = _binDir;
-    final awgExe = File('$binDir\\awg.exe');
-    if (!awgExe.existsSync()) {
-      throw Exception('awg.exe не найден: ${awgExe.path}');
+    // WireGuard-пара ключей. На Windows — через awg.exe (как было); на остальных
+    // (Android) — X25519 в Dart, чтобы не зависеть от бинаря.
+    final String privateKey;
+    final String publicKeyLocal;
+    final awgExe = File('$_binDir\\awg.exe');
+    if (Platform.isWindows && awgExe.existsSync()) {
+      final privResult = await Process.run(awgExe.path, ['genkey'], runInShell: false);
+      if (privResult.exitCode != 0) {
+        throw Exception('awg genkey ошибка: ${privResult.stderr}');
+      }
+      privateKey = (privResult.stdout as String).trim();
+      if (privateKey.length < 40) {
+        throw Exception('awg genkey вернул некорректный ключ');
+      }
+      final pubProc = await Process.start(awgExe.path, ['pubkey'], runInShell: false);
+      pubProc.stdin.writeln(privateKey);
+      await pubProc.stdin.close();
+      final pubOut = await pubProc.stdout.transform(utf8.decoder).join();
+      if (await pubProc.exitCode != 0) {
+        throw Exception('awg pubkey ошибка');
+      }
+      publicKeyLocal = pubOut.trim();
+    } else {
+      final kp = await X25519().newKeyPair();
+      privateKey = base64.encode(await kp.extractPrivateKeyBytes());
+      publicKeyLocal = base64.encode((await kp.extractPublicKey()).bytes);
     }
-
-    final privResult = await Process.run(awgExe.path, ['genkey'], runInShell: false);
-    if (privResult.exitCode != 0) {
-      throw Exception('awg genkey ошибка: ${privResult.stderr}');
-    }
-    final privateKey = (privResult.stdout as String).trim();
-    if (privateKey.length < 40) {
-      throw Exception('awg genkey вернул некорректный ключ');
-    }
-
-    final pubProc = await Process.start(awgExe.path, ['pubkey'], runInShell: false);
-    pubProc.stdin.writeln(privateKey);
-    await pubProc.stdin.close();
-    final pubOut = await pubProc.stdout.transform(utf8.decoder).join();
-    final pubExit = await pubProc.exitCode;
-    if (pubExit != 0) {
-      throw Exception('awg pubkey ошибка');
-    }
-    final publicKeyLocal = pubOut.trim();
 
     final body = jsonEncode({
       'key': publicKeyLocal,

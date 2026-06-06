@@ -13,7 +13,9 @@ abstract class VpnService {
 
   Stream<VpnStatus> get statusStream;
   Future<void> connect(String singboxConfigJson,
-      {List<String> excludedApps = const []});
+      {List<String> excludedApps = const [],
+      String protocol = '',
+      String country = ''});
   Future<void> connectProxy({
     String? singboxConfigJson,
     String? xrayConfigJson,
@@ -60,9 +62,15 @@ class _MobileVpnService implements VpnService {
 
   @override
   Future<void> connect(String config,
-          {List<String> excludedApps = const []}) =>
-      _method.invokeMethod(
-          'connect', {'config': config, 'excludedApps': excludedApps});
+          {List<String> excludedApps = const [],
+          String protocol = '',
+          String country = ''}) =>
+      _method.invokeMethod('connect', {
+        'config': config,
+        'excludedApps': excludedApps,
+        'protocol': protocol,
+        'country': country,
+      });
 
   @override
   Future<void> connectProxy({
@@ -384,7 +392,9 @@ class _WindowsVpnService implements VpnService {
 
   @override
   Future<void> connect(String configJson,
-      {List<String> excludedApps = const []}) async {
+      {List<String> excludedApps = const [],
+      String protocol = '',
+      String country = ''}) async {
     _controller.add(VpnStatus.connecting);
     try {
       final exe = File(_exePath);
