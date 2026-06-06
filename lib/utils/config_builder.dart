@@ -39,6 +39,7 @@ class ConfigBuilder {
     String dns = '8.8.8.8',
     bool allowInsecure = false,
     bool tfo = false,
+    bool fragment = false, // TLS-фрагментация ClientHello (анти-DPI), только vless+TLS
     Map<String, dynamic>? warp, // WARP-каскад: выход через Cloudflare поверх сервера
     List<String> bypassApps = const [], // split-tunnel: эти процессы идут напрямую
     List<String> excludeApps = const [], // android: пакеты мимо VPN (tun exclude_package)
@@ -52,7 +53,7 @@ class ConfigBuilder {
         : switch (profile.protocol) {
             // dns-direct: резолв адреса сервера напрямую, без петли через proxy
             VpnProtocol.vless => _singboxVless(profile.config,
-                allowInsecure: allowInsecure, tfo: tfo)
+                allowInsecure: allowInsecure, tfo: tfo, fragment: fragment)
               ..['domain_resolver'] = {'server': 'dns-direct', 'strategy': 'prefer_ipv4'},
             VpnProtocol.tuic => _tuic(profile.config, allowInsecure: allowInsecure),
             VpnProtocol.hysteria2 =>
@@ -687,6 +688,7 @@ class ConfigBuilder {
     Map<String, dynamic> c, {
     bool allowInsecure = false,
     bool tfo = false,
+    bool fragment = false,
   }) {
     final transport = c['transport'] as String? ?? 'tcp';
     final security = c['security'] as String? ?? 'none';
@@ -719,6 +721,12 @@ class ConfigBuilder {
         'insecure': insecure,
         'utls': {'enabled': true, 'fingerprint': c['fp'] ?? 'chrome'},
       };
+    }
+
+    // TLS-фрагментация: дробим ClientHello соединения к серверу (анти-DPI, аналог
+    // xray-фрагментации на Windows). Работает с reality и tls (uTLS тоже умеет).
+    if (fragment && out['tls'] is Map) {
+      (out['tls'] as Map)['fragment'] = true;
     }
 
     switch (transport) {

@@ -45,7 +45,10 @@ class SettingsScreen extends StatelessWidget {
             value: vpn.fragment,
             onChanged: vpn.isConnected ? null : vpn.setFragment,
           ),
-          if (vpn.fragment) _FragmentParamsTile(vpn: vpn, s: s),
+          // детальные параметры (packets/length/interval) — xray-специфика (Windows);
+          // на Android sing-box фрагментирует ClientHello без этих knob'ов
+          if (vpn.fragment && !Platform.isAndroid)
+            _FragmentParamsTile(vpn: vpn, s: s),
           SwitchListTile(
             title: Text(s.muxTitle),
             subtitle: Text(s.muxDesc),

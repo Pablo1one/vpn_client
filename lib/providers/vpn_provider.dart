@@ -495,6 +495,7 @@ class VpnProvider extends ChangeNotifier {
         dns: _dns,
         allowInsecure: _allowInsecure,
         tfo: _tfo,
+        fragment: _fragment, // TLS-фрагментация (тумблер в настройках)
         warp: warpJson,
         bypassApps: _bypassApps,
         excludeApps: _excludedApps, // android split-tunnel → tun exclude_package
