@@ -15,7 +15,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // на Android 13+ уведомления по умолчанию запрещены — без них не виден
+        // на Android 13+ уведомления по умолчанию запрещены - без них не виден
         // виджет-уведомление с активным коннектом, скоростью и кнопкой отключения
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=

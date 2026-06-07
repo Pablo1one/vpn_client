@@ -36,7 +36,7 @@ class TrayIconPainter {
   // ── Bolt ───────────────────────────────────────────────────────────────────
 
   static void _drawBolt(ui.Canvas c, double s) {
-    // 8-point lightning bolt polygon (diagonal, top-right → bottom-left)
+    // 8-point lightning bolt polygon (diagonal, top-right - bottom-left)
     // Vertices: A(22,2) B(12,2) C(6,16) D(14,16) E(8,30) F(18,30) G(26,16) H(18,16)
     final path = ui.Path()
       ..moveTo(s * 22 / 32, s * 2 / 32) // A
@@ -118,7 +118,7 @@ class TrayIconPainter {
     c.drawLine(ui.Offset(cx + d, cy - d), ui.Offset(cx - d, cy + d), line);
   }
 
-  // ── PNG → ICO wrapper ─────────────────────────────────────────────────────
+  // ── PNG - ICO wrapper ─────────────────────────────────────────────────────
 
   static Uint8List _pngToIco(Uint8List png, int w, int h) {
     final hdr = ByteData(22);

@@ -279,7 +279,7 @@ class L10n {
     cancel: 'Cancel',
     delete: 'Delete',
     unrecognizedFormat:
-        'Unrecognized format.\nSupported: vless://, tuic://, hysteria2://, vpn:// (Amnezia), WireGuard .conf, subscription URL',
+        'Unrecognized format.\nSupported: vless://, tuic://, hysteria2://, vpn:// (Amnezia), WireGuard .conf, subscription url',
     searchApps: 'Search apps…',
     openFile: 'Open .conf file',
     updates: 'Updates',
@@ -382,7 +382,7 @@ class L10n {
     cancel: 'Отмена',
     delete: 'Удалить',
     unrecognizedFormat:
-        'Неизвестный формат.\nПоддерживается: vless://, tuic://, hysteria2://, vpn:// (Amnezia), WireGuard .conf, URL подписки',
+        'Неизвестный формат.\nПоддерживается: vless://, tuic://, hysteria2://, vpn:// (Amnezia), WireGuard .conf, url подписки',
     searchApps: 'Поиск приложений…',
     openFile: 'Открыть .conf файл',
     updates: 'Обновления',

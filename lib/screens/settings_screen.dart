@@ -37,7 +37,7 @@ class SettingsScreen extends StatelessWidget {
           ],
           const Divider(height: 1),
 
-          // ── Advanced (MUX / fragmentation / TLS) ─────────────────────────
+          // ── Advanced (MUX / fragmentation / tls) ─────────────────────────
           _SectionHeader(s.advanced),
           SwitchListTile(
             title: Text(s.fragmentTitle),
@@ -45,8 +45,8 @@ class SettingsScreen extends StatelessWidget {
             value: vpn.fragment,
             onChanged: vpn.isConnected ? null : vpn.setFragment,
           ),
-          // детальные параметры (packets/length/interval) — xray-специфика (Windows);
-          // на Android sing-box фрагментирует ClientHello без этих knob'ов
+          // детальные параметры (packets/length/interval) - xray-специфика (Windows);
+          // на ведроиде sing-box фрагментирует ClientHello без этих knob'ов
           if (vpn.fragment && !Platform.isAndroid)
             _FragmentParamsTile(vpn: vpn, s: s),
           SwitchListTile(
@@ -111,7 +111,7 @@ class SettingsScreen extends StatelessWidget {
           if (Platform.isWindows) const _RouteCleanupTile(),
           const Divider(height: 1),
 
-          // ── WARP ─────────────────────────────────────────────────────────
+          // ── warp ─────────────────────────────────────────────────────────
           _SectionHeader(s.warpTitle),
           SwitchListTile(
             secondary: Icon(Icons.public_rounded,
@@ -179,7 +179,7 @@ class SettingsScreen extends StatelessWidget {
 
 }
 
-// ── Кастомный DNS ─────────────────────────────────────────────────────────────
+// ── Кастомный dns ─────────────────────────────────────────────────────────────
 
 class _DnsTile extends StatefulWidget {
   final VpnProvider vpn;
@@ -224,7 +224,7 @@ class _DnsTileState extends State<_DnsTile> {
   }
 }
 
-// ── Параметры TLS-фрагментации (показываются при включённой фрагментации) ─────
+// ── Параметры tls-фрагментации (показываются при включённой фрагментации) ─────
 
 class _FragmentParamsTile extends StatefulWidget {
   final VpnProvider vpn;
@@ -538,7 +538,7 @@ class _RoutingModeSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.ac;
-    // split-tunnel: на Android — exclude_package (excludedApps), на Windows — bypassApps
+    // split-tunnel: на ведроиде - exclude_package (excludedApps), на Windows - bypassApps
     final perApp = Platform.isAndroid ? vpn.excludedApps : vpn.bypassApps;
     final active = perApp.isNotEmpty;
     return Padding(
@@ -567,7 +567,7 @@ class _RoutingModeSelector extends StatelessWidget {
               ),
             ],
           ),
-          // split-tunnel — независимый оверлей (поверх любого режима), не «режим»
+          // split-tunnel - независимый оверлей (поверх любого режима), не «режим»
           if (Platform.isWindows || Platform.isAndroid) ...[
             const SizedBox(height: 8),
             MouseRegion(
@@ -637,7 +637,7 @@ class _RoutingModeSelector extends StatelessWidget {
     if (result != null) vpn.setBypassApps(result);
   }
 
-  // Android: пикер установленных приложений → exclude_package (мимо VPN)
+  // Android: пикер установленных приложений - exclude_package (мимо VPN)
   Future<void> _openExcludedApps(
       BuildContext context, VpnProvider vpn, L10n s) async {
     final result = await showModalBottomSheet<List<String>>(
@@ -1065,7 +1065,7 @@ class _UpdateTileState extends State<_UpdateTile> {
       // при успехе приложение закрывается из downloadAndRun (exit 0)
     } catch (_) {
       if (!mounted) return;
-      // фоллбэк — открыть страницу релиза в браузере
+      // фоллбэк - открыть страницу релиза в браузере
       await launchUrl(Uri.parse(_info!.downloadUrl),
           mode: LaunchMode.externalApplication);
       if (mounted) setState(() => _state = _UpdateState.available);

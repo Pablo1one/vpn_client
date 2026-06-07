@@ -1,5 +1,5 @@
 /// CIDR arithmetic: subtract a set of blocks from 0.0.0.0/0.
-/// Used to build WireGuard AllowedIPs = "all IPv4 except Russian subnets".
+/// Used to build WireGuard AllowedIPs = "all ipv4 except Russian subnets".
 class CidrUtils {
   static List<String> invertIpv4(List<String> excludeCidrs) {
     final excluded = <_Block>[];

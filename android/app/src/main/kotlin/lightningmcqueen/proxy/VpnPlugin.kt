@@ -37,11 +37,11 @@ object VpnPlugin : PluginRegistry.ActivityResultListener {
                 override fun onListen(args: Any?, sink: EventChannel.EventSink?) {
                     eventSink = sink
                     // статусы прилетают из фоновых потоков сервиса/libbox, а flutter-каналы
-                    // можно трогать только с main-потока — маршалим через main handler
+                    // можно трогать только с main-потока - маршалим через main handler
                     SingBoxVpnService.statusListener = { status ->
                         mainHandler.post { eventSink?.success(status) }
                     }
-                    // при пересоздании активити (тап по уведомлению) UI подписывается заново —
+                    // при пересоздании активити (тап по уведомлению) UI подписывается заново -
                     // сразу отдаём текущий статус сервиса, иначе он считает что отключено
                     mainHandler.post { eventSink?.success(SingBoxVpnService.currentStatus) }
                 }

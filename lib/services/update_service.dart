@@ -10,8 +10,8 @@ class UpdateInfo {
 }
 
 class UpdateService {
-  // публичные репо только с релизами (код приватный, а GitHub API /releases/latest
-  // у приватного репо без токена отдаёт 404). Под android — отдельный репо с apk.
+  // публичные репо только с релизами (код приватный, а GitHub api /releases/latest
+  // у приватного репо без токена отдаёт 404). Под ведроид - отдельный репо с apk.
   static String get _repo => Platform.isAndroid
       ? 'Pablo1one/vpn_client_releases_android'
       : 'Pablo1one/vpn_client_releases';
@@ -25,7 +25,7 @@ class UpdateService {
   }
 
   /// Returns [UpdateInfo] if a newer version is available, null if up to date.
-  /// Бросает исключение при сбое проверки (нет сети, приватный репо, нет релизов → 404).
+  /// Бросает исключение при сбое проверки (нет сети, приватный репо, нет релизов - 404).
   Future<UpdateInfo?> check() async {
     final current = await currentVersion();
     final resp = await http.get(

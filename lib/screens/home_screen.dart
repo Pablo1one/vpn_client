@@ -66,11 +66,20 @@ class HomeScreen extends StatelessWidget {
             SizedBox(
               height: 18,
               child: vpn.activeProfile != null
-                  ? Text(
-                      vpn.activeProfile!.protocolLabel,
-                      style: TextStyle(
-                          fontSize: 12,
-                          color: context.ac.textSecondary),
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          vpn.activeProfile!.protocolLabel,
+                          style: TextStyle(
+                              fontSize: 12, color: context.ac.textSecondary),
+                        ),
+                        // каскад warp активен - бейдж рядом с протоколом
+                        if (vpn.warpActive && vpn.isConnected) ...[
+                          const SizedBox(width: 6),
+                          const _WarpBadge(),
+                        ],
+                      ],
                     )
                   : null,
             ),
@@ -217,28 +226,28 @@ class _ConnectButtonState extends State<_ConnectButton>
 
     final isLight = Theme.of(context).brightness == Brightness.light;
 
-    // Заливка: в светлой теме — насыщенная (низкая прозрачность давала блёклый
-    // серый), в тёмной — прежняя «неоновая» полупрозрачность.
+    // Заливка: в светлой теме - насыщенная (низкая прозрачность давала блёклый
+    // серый), в тёмной - прежняя «неоновая» полупрозрачность.
     final double fillHi, fillLo;
     if (isLight) {
       if (connected || busy || canPress) {
         fillHi = 0.95; fillLo = 0.60;
       } else {
-        fillHi = 0.45; fillLo = 0.22; // нет профиля — приглушённо
+        fillHi = 0.45; fillLo = 0.22; // нет профиля - приглушённо
       }
     } else {
       fillHi = connected ? 0.28 : 0.16;
       fillLo = connected ? 0.10 : 0.05;
     }
 
-    // Контур: подключено — оранжевый в светлой теме (был жёлтый), cyan в тёмной.
+    // Контур: подключено - оранжевый в светлой теме (был жёлтый), cyan в тёмной.
     const connectedOrange = Color(0xFFFF7A00);
     final borderColor = connected
         ? (isLight ? connectedOrange : c.upload)
         : btnColor.withOpacity(
             canPress ? (isLight ? 1.0 : 0.85) : (isLight ? 0.45 : 0.35));
 
-    // Иконка: в светлой теме нужен контраст на насыщенной заливке; идл — молния.
+    // Иконка: в светлой теме нужен контраст на насыщенной заливке; идл - молния.
     final Color iconColor;
     if (isLight) {
       if (connected || busy) {
@@ -370,6 +379,38 @@ class _ArcPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_ArcPainter old) => old.color != color;
+}
+
+// ── warp badge (каскад через cloudflare) ──────────────────────────────────────
+
+class _WarpBadge extends StatelessWidget {
+  const _WarpBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ac;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: c.primary.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: c.primary.withOpacity(0.5)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.bolt_rounded, size: 11, color: c.primary),
+          const SizedBox(width: 2),
+          Text('WARP',
+              style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                  color: c.primary)),
+        ],
+      ),
+    );
+  }
 }
 
 // ── Profile label ─────────────────────────────────────────────────────────────

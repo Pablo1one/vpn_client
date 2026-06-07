@@ -10,7 +10,7 @@ class KillSwitchService {
   bool _active = false;
   bool get active => _active;
 
-  /// Включает блокировку. [tunAlias] — имя туннельного адаптера
+  /// Включает блокировку. [tunAlias] - имя туннельного адаптера
   /// (`tun0` для sing-box, `vpnclient_awg` для AmneziaWG).
   Future<void> apply({
     required String serverHost,
@@ -30,7 +30,7 @@ class KillSwitchService {
     for (var i = 0; i < ips.length; i++) {
       cmds.add(_allow('LMQ Server $i', '-RemoteAddress ${ips[i]}'));
     }
-    // дефолт — блокировать исходящее (разрешения выше работают как исключения)
+    // дефолт - блокировать исходящее (разрешения выше работают как исключения)
     cmds.add('Set-NetFirewallProfile -All -DefaultOutboundAction Block');
 
     await _runPs(cmds.join('; '));

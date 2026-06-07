@@ -31,22 +31,22 @@ class VpnProvider extends ChangeNotifier {
   List<String> _excludedApps = [];
   List<String> _bypassApps = []; // split-tunnel Windows: процессы мимо VPN
   bool _mux = false;        // мультиплексирование
-  bool _fragment = false;   // TLS-фрагментация (обход DPI)
-  // параметры фрагментации (дефолты — текущие зашитые значения)
+  bool _fragment = false;   // tls-фрагментация (обход dpi)
+  // параметры фрагментации (дефолты - текущие зашитые значения)
   String _fragPackets = 'tlshello';
   int _fragLenMin = 100, _fragLenMax = 200;
   int _fragIntMin = 10, _fragIntMax = 20;
-  String _dns = '';         // кастомный DNS (пусто = дефолт 8.8.8.8)
-  bool _allowInsecure = false; // принимать недоверенные TLS-сертификаты
-  bool _tfo = false;           // TCP Fast Open
-  bool _warpCascade = false;   // выход через Cloudflare WARP поверх нашего сервера
+  String _dns = '';         // кастомный dns (пусто = дефолт 8.8.8.8)
+  bool _allowInsecure = false; // принимать недоверенные tls-сертификаты
+  bool _tfo = false;           // tcp Fast Open
+  bool _warpCascade = false;   // выход через cloudflare warp поверх нашего сервера
   bool _blockAds = false;      // блокировка рекламы (geosite-ads reject)
   String? _error;
 
   bool _warpActive = false;
-  bool _awgMode = false;    // текущее подключение — AWG
+  bool _awgMode = false;    // текущее подключение - awg
   bool _cancelRequested = false;  // пользователь прервал подключение
-  bool _switching = false;        // идёт смена сервера/протокола (disconnect→connect)
+  bool _switching = false;        // идёт смена сервера/протокола (disconnect-connect)
   bool _userWantsConnected = false; // юзер хочет быть на связи (для авто-реконнекта)
   int _subRefreshHours = 12;      // период авто-обновления подписки (0 = выкл)
   Timer? _subTimer;
@@ -54,7 +54,7 @@ class VpnProvider extends ChangeNotifier {
   bool _launchOnStartup = false;  // автозапуск с Windows (+ автоконнект при старте)
   String _awgServerHost = '';
 
-  final _pingResults = <String, int?>{};  // profileId → ms, null = недоступен
+  final _pingResults = <String, int?>{};  // profileId - ms, null = недоступен
   bool _pinging = false;
 
   final _countryCache = <String, String>{};
@@ -107,13 +107,13 @@ class VpnProvider extends ChangeNotifier {
   Future<void> init() async {
     try {
       _vpn = VpnService.create();
-      // кнопка «Отключить» в шторке Android — пользовательский дисконнект, без реконнекта
+      // кнопка «Отключить» в шторке ведроида - пользовательский дисконнект, без реконнекта
       _vpn.onUserStop = () {
         _userWantsConnected = false;
       };
       if (Platform.isWindows) await _vpn.cleanup();
       _vpn.statusStream.listen((s) {
-        // при смене сервера/протокола не мигаем серым промежуточным статусом —
+        // при смене сервера/протокола не мигаем серым промежуточным статусом -
         // держим "подключение", но скорость останавливаем (новый коннект её поднимет)
         if (_switching &&
             (s == VpnStatus.disconnecting || s == VpnStatus.disconnected)) {
@@ -123,8 +123,8 @@ class VpnProvider extends ChangeNotifier {
           notifyListeners();
           return;
         }
-        // неожиданный обрыв (был connected → стал disconnected, а юзер хочет связь)
-        // → авто-переподключение
+        // неожиданный обрыв (был connected - стал disconnected, а юзер хочет связь)
+        // - авто-переподключение
         final wasConnected = _status == VpnStatus.connected;
         _status = s;
         if (s == VpnStatus.connected) {
@@ -135,7 +135,7 @@ class VpnProvider extends ChangeNotifier {
               serverHost: _awgServerHost,
             );
           } else {
-            _speed.start();
+            _speed.start(serverHost: _activeProfile?.serverHost ?? '');
           }
         } else {
           _connectedAt = null;
@@ -151,7 +151,7 @@ class VpnProvider extends ChangeNotifier {
         if (s != VpnStatus.error) _error = null;
         // отложенное авто-обновление подписки: выполняем только теперь, когда
         // туннель опущен (при коннекте пропускали, чтобы не просаживать скорость).
-        // Стоит после early-return авто-реконнекта — при обрыве с реконнектом не
+        // Стоит после early-return авто-реконнекта - при обрыве с реконнектом не
         // сработает, только при реальном отключении.
         if (s == VpnStatus.disconnected && _subRefreshDeferred) {
           _subRefreshDeferred = false;
@@ -307,7 +307,7 @@ class VpnProvider extends ChangeNotifier {
   }
 
   Future<void> _refreshAllSubscriptions() async {
-    // Не дёргаем подписку при активном коннекте: запрос к URL идёт через туннель
+    // Не дёргаем подписку при активном коннекте: запрос к url идёт через туннель
     // и просаживает скорость. Откладываем до отключения (флаг отработает в
     // обработчике статуса). Ручное обновление (↻) при этом по-прежнему работает.
     if (_status == VpnStatus.connected || _status == VpnStatus.connecting) {
@@ -355,19 +355,19 @@ class VpnProvider extends ChangeNotifier {
         await _routeCleanup.cleanBypassRoutes();
       }
 
-      // WARP-каскад (opt-in): выход через Cloudflare поверх нашего сервера.
-      // Для AWG не поддерживается (системный WG). Когда выключен — обычный коннект.
+      // warp-каскад (opt-in): выход через cloudflare поверх нашего сервера.
+      // Для awg не поддерживается (системный WG). Когда выключен - обычный коннект.
       Map<String, dynamic>? warpJson;
       bool twoPhase = false;
-      // WARP-каскад на Windows и Android (движок sing-box умеет warp-endpoint).
-      // AWG исключаем — каскад поверх системного/awg-туннеля не делаем.
+      // warp-каскад на Windows и Android (движок sing-box умеет warp-endpoint).
+      // awg исключаем - каскад поверх системного/awg-туннеля не делаем.
       final wantWarp = _warpCascade && profile.protocol != VpnProtocol.amnezia;
       if (wantWarp) {
         var warp = await WarpService.loadSaved();
-        // нет конфига ИЛИ старый без reserved (client_id) — нужна регистрация
+        // нет конфига ИЛИ старый без reserved (client_id) - нужна регистрация
         if (warp == null || warp.reserved == null) {
-          // Cloudflare API в РФ заблокирован → регистрируемся ЧЕРЕЗ туннель:
-          // фаза 1 — поднять сервер без WARP, затем register по живому туннелю.
+          // cloudflare api в РФ заблокирован - регистрируемся ЧЕРЕЗ туннель:
+          // фаза 1 - поднять сервер без warp, затем register по живому туннелю.
           twoPhase = true;
           _switching = true; // держим UI в "подключении" на обе фазы
           try {
@@ -390,7 +390,7 @@ class VpnProvider extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       _switching = false;
-      // отмена пользователем в процессе подключения — не показываем ошибку
+      // отмена пользователем в процессе подключения - не показываем ошибку
       if (_cancelRequested) {
         _cancelRequested = false;
         return;
@@ -401,7 +401,7 @@ class VpnProvider extends ChangeNotifier {
     }
   }
 
-  // Собственно подключение по протоколу. warpJson != null → WARP-каскад.
+  // Собственно подключение по протоколу. warpJson != null - warp-каскад.
   Future<void> _connectInternal(
     VpnProfile profile, {
     Map<String, dynamic>? warpJson,
@@ -421,7 +421,7 @@ class VpnProvider extends ChangeNotifier {
           ? await _loadRuCidrs()
           : <String>[];
       if (transport == 'grpc') {
-        // gRPC через sing-box TUN: xray 26.x deprecated gRPC — REFUSED_STREAM
+        // gRPC через sing-box TUN: xray 26.x deprecated gRPC - REFUSED_STREAM
         final config = ConfigBuilder.build(
           profile,
           routingMode: _routingMode,
@@ -468,7 +468,7 @@ class VpnProvider extends ChangeNotifier {
     } else if (Platform.isWindows &&
         (profile.protocol == VpnProtocol.tuic ||
             profile.protocol == VpnProtocol.hysteria2)) {
-      // TUIC / H2 — sing-box proxy on :10808 + TUN sing-box forwarder
+      // TUIC / H2 - sing-box proxy on :10808 + TUN sing-box forwarder
       final ruCidrs = _routingMode == RoutingMode.russiaBypass
           ? await _loadRuCidrs()
           : <String>[];
@@ -497,7 +497,7 @@ class VpnProvider extends ChangeNotifier {
     } else {
       // Mobile (and any other platform): single sing-box with full config
       // в режиме «Россия напрямую» грузим российские подсети (иначе правило
-      // ip_cidr→direct не добавится и режим не работает)
+      // ip_cidr-direct не добавится и режим не работает)
       final ruCidrs = _routingMode == RoutingMode.russiaBypass
           ? await _loadRuCidrs()
           : <String>[];
@@ -511,10 +511,10 @@ class VpnProvider extends ChangeNotifier {
         dns: _dns,
         allowInsecure: _allowInsecure,
         tfo: _tfo,
-        fragment: _fragment, // TLS-фрагментация (тумблер в настройках)
+        fragment: _fragment, // tls-фрагментация (тумблер в настройках)
         warp: warpJson,
         bypassApps: _bypassApps,
-        excludeApps: _excludedApps, // android split-tunnel → tun exclude_package
+        excludeApps: _excludedApps, // android split-tunnel - tun exclude_package
         adsRuleSet: await _ensureAdsRuleSet(),
       );
       await _vpn.connect(
@@ -529,7 +529,7 @@ class VpnProvider extends ChangeNotifier {
   // Прерывание подключения в процессе (пользователь нажал отмену)
   Future<void> cancelConnect() async {
     _cancelRequested = true;
-    _userWantsConnected = false; // отмена пользователем — не реконнектим
+    _userWantsConnected = false; // отмена пользователем - не реконнектим
     _warpActive = false;
     _awgMode = false;
     _status = VpnStatus.disconnecting;
@@ -544,7 +544,7 @@ class VpnProvider extends ChangeNotifier {
 
   Future<void> connectWarp() async {
     _error = null;
-    _warpActive = true;  // устанавливаем до подключения — CDN показывает спиннер
+    _warpActive = true;  // устанавливаем до подключения - cdn показывает спиннер
     _status = VpnStatus.connecting;
     notifyListeners();
     try {
@@ -579,7 +579,7 @@ class VpnProvider extends ChangeNotifier {
           notifyListeners();
           return;
         }
-        // UDP/QUIC-протоколы: их порты не принимают TCP — пингуем ICMP + фоллбэк TCP 443
+        // udp/quic-протоколы: их порты не принимают tcp - пингуем icmp + фоллбэк tcp 443
         final isUdp = p.protocol == VpnProtocol.amnezia ||
             p.protocol == VpnProtocol.wireguard ||
             p.protocol == VpnProtocol.tuic ||
@@ -587,7 +587,7 @@ class VpnProvider extends ChangeNotifier {
         if (isUdp) {
           var ms = await SpeedService.icmpPing(host);
           if (ms == null) {
-            // ICMP часто блокируется на VPN-серверах — пробуем TCP 443
+            // icmp часто блокируется на VPN-серверах - пробуем tcp 443
             try {
               final sw = Stopwatch()..start();
               final sock = await Socket.connect(host, 443,
@@ -646,7 +646,7 @@ class VpnProvider extends ChangeNotifier {
   Future<int> cleanBypassRoutes() => _routeCleanup.cleanBypassRoutes();
 
   Future<void> disconnect() async {
-    if (!_switching) _userWantsConnected = false; // ручной дисконнект — не реконнектим
+    if (!_switching) _userWantsConnected = false; // ручной дисконнект - не реконнектим
     _warpActive = false;
     _awgMode = false;
     // при переключении статус держим "подключение" (см. _switching), не серый
@@ -729,7 +729,7 @@ class VpnProvider extends ChangeNotifier {
         // сначала чистое отключение старого (без гонки статусов), затем коннект к новому
         await disconnect();
         // пауза на устаканивание маршрутизации/интерфейса перед новым коннектом
-        // (иначе QUIC-протоколы — tuic/hysteria — могут не поднять трафик с первого раза)
+        // (иначе quic-протоколы - tuic/hysteria - могут не поднять трафик с первого раза)
         await Future.delayed(const Duration(milliseconds: 1200));
         await connect();
       } finally {
@@ -773,7 +773,7 @@ class VpnProvider extends ChangeNotifier {
         }
         _profiles = _repo.getAll().toList();
         // У свежих профилей новые случайные id, поэтому активный надо переназначить
-        // на эквивалентный (по имени+серверу+порту) — иначе при живом туннеле на
+        // на эквивалентный (по имени+серверу+порту) - иначе при живом туннеле на
         // главной пропадает выбранный профиль («Профиль не выбран»). Туннель не трогаем.
         if (activeRemoved && oldActive != null) {
           VpnProfile? match;
@@ -943,7 +943,7 @@ class VpnProvider extends ChangeNotifier {
     return '$appDir\\data\\flutter_assets\\assets\\data\\geosite-ads.srs';
   }
 
-  // На Android ассет лежит внутри APK — sing-box нужен реальный путь, поэтому
+  // На ведроиде ассет лежит внутри apk - sing-box нужен реальный путь, поэтому
   // распаковываем geosite-ads.srs в файлы приложения один раз и отдаём путь.
   String? _cachedAdsPathMobile;
   Future<String?> _ensureAdsRuleSet() async {
@@ -1018,7 +1018,7 @@ class VpnProvider extends ChangeNotifier {
   }
 
   // Запущенные процессы Windows для split-tunnel: [{package: exe, name: ярлык}]
-  // (ключ 'package' — чтобы переиспользовать существующий пикер приложений)
+  // (ключ 'package' - чтобы переиспользовать существующий пикер приложений)
   Future<List<Map<String, String>>> getRunningProcesses() async {
     if (!Platform.isWindows) return [];
     try {
@@ -1027,7 +1027,7 @@ class VpnProvider extends ChangeNotifier {
         [
           '-NoProfile',
           '-Command',
-          // OutputEncoding=UTF8 + читаем сырые байты → корректная кириллица в именах
+          // OutputEncoding=UTF8 + читаем сырые байты - корректная кириллица в именах
           r'[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Get-Process | Where-Object {$_.Path} | Select-Object ProcessName,Description | ConvertTo-Json -Compress',
         ],
         runInShell: false,

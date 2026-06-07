@@ -134,7 +134,7 @@ const _mcColors = AppColors(
 // ── AppTheme ──────────────────────────────────────────────────────────────────
 
 class AppTheme {
-  // Jackson Storm — статические константы (для обратной совместимости)
+  // Jackson Storm - статические константы (для обратной совместимости)
   static const cyan   = Color(0xFF00D4FF);
   static const purple = Color(0xFF9B4DFF);
 

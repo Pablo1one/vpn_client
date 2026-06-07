@@ -101,7 +101,7 @@ class VpnProfile {
     return 443;
   }
 
-  // Сигнатура уникального подключения — для отсева дубликатов ключей
+  // Сигнатура уникального подключения - для отсева дубликатов ключей
   String get signature {
     final cred = (config['uuid'] ??
             config['password'] ??

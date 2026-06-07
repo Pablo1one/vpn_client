@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'world_map_data.dart';
 
-/// Фоновая точечная карта мира. Масштабируется под размер (cover — заполняет
+/// Фоновая точечная карта мира. Масштабируется под размер (cover - заполняет
 /// область, лишнее обрезается), тонируется переданным цветом. Не ловит клики.
 class WorldMapBackground extends StatelessWidget {
   final Color color;

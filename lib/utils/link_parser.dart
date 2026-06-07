@@ -88,11 +88,11 @@ class LinkParser {
       return _parseWireguardConf(s);
     }
     if (s.startsWith('http://') || s.startsWith('https://')) {
-      // Async — caller should use parseSubscriptionUrl()
+      // Async - caller should use parseSubscriptionUrl()
       return ParseResult.failure('subscription_url');
     }
     return ParseResult.failure(
-      'Unrecognized format.\nSupported: vless://, tuic://, hysteria2://, vpn:// (Amnezia), WireGuard .conf, subscription URL (http/https)',
+      'Unrecognized format.\nSupported: vless://, tuic://, hysteria2://, vpn:// (Amnezia), WireGuard .conf, subscription url (http/https)',
     );
   }
 
@@ -125,7 +125,7 @@ class LinkParser {
             'Убедитесь, что URL — ссылка на подписку, а не на веб-панель.');
       }
 
-      // 1. Try JSON (Hiddify JSON with "configs", or sing-box JSON with "outbounds")
+      // 1. Try json (Hiddify json with "configs", or sing-box json with "outbounds")
       try {
         final json = jsonDecode(body);
         final profiles = _parseJsonSubscription(json)
@@ -136,7 +136,7 @@ class LinkParser {
         }
       } catch (_) {}
 
-      // 2. Try base64 decode → line-by-line URIs
+      // 2. Try base64 decode - line-by-line URIs
       String content = body;
       try {
         final decoded =
@@ -169,7 +169,7 @@ class LinkParser {
     }
   }
 
-  // "upload=N; download=N; total=N; expire=N" → SubUserInfo
+  // "upload=N; download=N; total=N; expire=N" - SubUserInfo
   static SubUserInfo? _parseUserInfo(String? header) {
     if (header == null || header.trim().isEmpty) return null;
     final m = <String, int>{};
@@ -198,7 +198,7 @@ class LinkParser {
     return uri.replace(queryParameters: cleaned.isEmpty ? null : cleaned);
   }
 
-  /// Parses Hiddify JSON (`configs` array) or sing-box JSON (`outbounds` array).
+  /// Parses Hiddify json (`configs` array) or sing-box json (`outbounds` array).
   static List<VpnProfile> _parseJsonSubscription(dynamic json) {
     final profiles = <VpnProfile>[];
 
@@ -247,7 +247,7 @@ class LinkParser {
               'sid': (tls['reality'] as Map?)?['short_id'] ?? '',
               'flow': item['flow'] ?? '',
               'path': transport['path'] ?? '/',
-              // xhttp хранит host прямым полем, ws — в headers.Host
+              // xhttp хранит host прямым полем, ws - в headers.Host
               'host': transport['host'] ??
                   (transport['headers'] as Map?)?['Host'] ?? server,
               if (transportType == 'xhttp') 'mode': transport['mode'] ?? 'auto',

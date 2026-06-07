@@ -15,9 +15,8 @@ class SpeedData {
 
 class SpeedService {
   static const _apiBase = 'http://127.0.0.1:9090';
-  static const _pingUrl = 'http://cp.cloudflare.com/generate_204';
 
-  // тот же секрет, что вшит в конфиг clash_api — иначе API ответит 401
+  // тот же секрет, что вшит в конфиг clash_api - иначе api ответит 401
   Map<String, String> get _authHeaders =>
       {'Authorization': 'Bearer ${ConfigBuilder.clashApiSecret}'};
 
@@ -27,8 +26,10 @@ class SpeedService {
   Timer? _awgPollTimer;
   int _pingMs = -1;
   bool _active = false;
+  String _serverHost = ''; // хост сервера, пинг бьём по нему (tcp 443)
+  String _serverIp = '';   // его IP, резолвим 1 раз (чтоб пинг не дрейфовал)
 
-  // AWG mode state
+  // awg mode state
   String? _awgInterface;
   int? _prevRx;
   int? _prevTx;
@@ -36,29 +37,33 @@ class SpeedService {
 
   Stream<SpeedData> get stream => _controller.stream;
 
-  // ── Clash API (sing-box / xray) mode ──────────────────────────────────────
+  // ── Clash api (sing-box / xray) mode ──────────────────────────────────────
 
-  void start() {
+  void start({String serverHost = ''}) {
     if (_active) return;
     _active = true;
     _awgInterface = null;
+    _serverHost = serverHost;
+    _serverIp = '';
+    _resolveServerIp();
     _connectTrafficStream();
-    _updatePing();
-    _pingTimer = Timer.periodic(const Duration(seconds: 15), (_) => _updatePing());
+    _measureInitialPing(); // замер один раз при подключении (без перезамера - иначе дрейф)
   }
 
-  // ── AWG mode (interface byte counters + ICMP ping) ────────────────────────
+  // ── awg mode (interface byte counters + icmp ping) ────────────────────────
 
   void startAwg({required String interfaceName, String serverHost = ''}) {
     if (_active) return;
     _active = true;
     _awgInterface = interfaceName;
+    _serverHost = serverHost;
+    _serverIp = '';
+    _resolveServerIp();
     _prevRx = null;
     _prevTx = null;
     _prevSample = null;
     _awgPollTimer = Timer.periodic(const Duration(seconds: 1), (_) => _pollAwgStats());
-    _updateAwgPing();
-    _pingTimer = Timer.periodic(const Duration(seconds: 15), (_) => _updateAwgPing());
+    _measureInitialPing();
   }
 
   void stop() {
@@ -87,7 +92,7 @@ class SpeedService {
     try {
       // Счётчики берём у самого WireGuard через awg.exe (лёгкий свой процесс),
       // а не powershell Get-NetAdapterStatistics каждую секунду.
-      // `awg show <iface> transfer` → "<pubkey>\t<rx>\t<tx>" по пиру.
+      // `awg show <iface> transfer` - "<pubkey>\t<rx>\t<tx>" по пиру.
       final result = await Process.run(
         '$_binDir\\awg.exe',
         ['show', _awgInterface ?? '', 'transfer'],
@@ -124,23 +129,77 @@ class SpeedService {
     } catch (_) {}
   }
 
-  Future<void> _updateAwgPing() async {
-    if (!_active) return;
-    // TCP-хендшейк до публичного хоста ЧЕРЕЗ туннель: работает даже когда
-    // VPN-выход режет ICMP (а ping.exe там возвращал пусто), и не плодит процессы.
-    try {
-      final sw = Stopwatch()..start();
-      final socket = await Socket.connect('1.1.1.1', 443,
-          timeout: const Duration(seconds: 3));
-      sw.stop();
-      socket.destroy();
-      _pingMs = sw.elapsedMilliseconds;
-    } catch (_) {
-      _pingMs = -1;
+  // Пинг до САМОГО сервера (tcp-хендшейк к host:443). При активном коннекте IP
+  // сервера маршрутизируется direct (мимо туннеля), поэтому меряется реальная
+  // задержка до сервера, а не круг через туннель до внешней цели (раньше так и
+  // было - запредельные 200-500мс на главной). На нашем сервере 443 слушает
+  // haproxy, поэтому tcp отвечает для всех протоколов (vless/tuic/hysteria2/awg).
+  // Замер пинга ОДИН раз при подключении (с ретраями на прогрев туннеля). Первый
+  // успешный замер - настоящий хендшейк до сервера (~реальный rtt); дальше НЕ
+  // перезамеряем, иначе значение «дрейфует» вниз из-за переиспользования сессии
+  // к серверу (MUX/пул) - отдаёт быстрый поток без реального круга.
+  Future<void> _measureInitialPing() async {
+    for (var i = 0; i < 5; i++) {
+      if (!_active) return;
+      await _updatePing();
+      if (_pingMs > 0) return; // зафиксировали первый успешный замер
+      await Future.delayed(const Duration(seconds: 2));
     }
   }
 
-  // ── Clash API helpers ──────────────────────────────────────────────────────
+  Future<void> _updatePing() async {
+    if (!_active) return;
+    // Основной метод: tcp-хендшейк к САМОМУ серверу (IP:443). SYN-ACK приходит
+    // от реального сервера, подделать локально нельзя - настоящий rtt до сервера
+    // (как в «Ключах»). Бьём по запиненному IP, а не по домену - иначе значение
+    // дрейфует (домен со временем переразрешается в ближний cdn-узел - ~10мс).
+    // icmp нельзя - его перехватывает локальный tun-стек.
+    final host = _serverIp.isNotEmpty ? _serverIp : _serverHost;
+    if (host.isNotEmpty) {
+      final ms = await _tcpHandshakeMs(host, 443);
+      if (ms != null) {
+        _pingMs = ms;
+        return;
+      }
+    }
+    // Фолбэк для awg (сервер без открытого tcp 443): tcp к cdn 1.1.1.1:443 ЧЕРЕЗ
+    // туннель. Путь клиент-сервер-cdn, а cdn (anycast) вплотную к серверу, поэтому
+    // значение ≈ реальный rtt до сервера.
+    _pingMs = await _tcpHandshakeMs('1.1.1.1', 443) ?? -1;
+  }
+
+  // Резолвим хост сервера в ipv4 один раз и пинуем - чтобы пинг бил всегда в один
+  // и тот же origin, а не дрейфовал при переразрешении домена.
+  Future<void> _resolveServerIp() async {
+    final host = _serverHost;
+    if (host.isEmpty) return;
+    if (RegExp(r'^\d{1,3}(\.\d{1,3}){3}$').hasMatch(host)) {
+      _serverIp = host; // уже IP
+      return;
+    }
+    try {
+      final addrs =
+          await InternetAddress.lookup(host).timeout(const Duration(seconds: 5));
+      final v4 = addrs.where((a) => a.type == InternetAddressType.IPv4);
+      if (v4.isNotEmpty && _active) _serverIp = v4.first.address;
+    } catch (_) {}
+  }
+
+  // rtt tcp-хендшейка до host:port (мс), либо null при ошибке/таймауте.
+  Future<int?> _tcpHandshakeMs(String host, int port) async {
+    try {
+      final sw = Stopwatch()..start();
+      final socket = await Socket.connect(host, port,
+          timeout: const Duration(seconds: 3));
+      sw.stop();
+      socket.destroy();
+      return sw.elapsedMilliseconds;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // ── Clash api helpers ──────────────────────────────────────────────────────
 
   Future<void> _connectTrafficStream() async {
     while (_active) {
@@ -173,31 +232,6 @@ class SpeedService {
     }
   }
 
-  Future<void> _updatePing() async {
-    if (!_active) return;
-    try {
-      final c = http.Client();
-      try {
-        final resp = await c
-            .get(
-                Uri.parse(
-                    '$_apiBase/proxies/proxy/delay?timeout=5000&url=$_pingUrl'),
-                headers: _authHeaders)
-            .timeout(const Duration(seconds: 6));
-        if (resp.statusCode == 200) {
-          final j = jsonDecode(resp.body) as Map<String, dynamic>;
-          _pingMs = (j['delay'] as num? ?? -1).toInt();
-        } else {
-          _pingMs = -1;
-        }
-      } finally {
-        c.close();
-      }
-    } catch (_) {
-      _pingMs = -1;
-    }
-  }
-
   void dispose() {
     stop();
     _controller.close();
@@ -210,17 +244,18 @@ class SpeedService {
     return '${(bps / (1024 * 1024)).toStringAsFixed(2)} MB/s';
   }
 
-  // Статический ICMP-пинг для проверки ключей (AWG/WG — UDP, TCP не работает)
+  // icmp-пинг (для awg/WG, где tcp к серверу не отвечает). Флаги ping и формат
+  // вывода разные на win и linux/ведроид.
   static Future<int?> icmpPing(String host) async {
     try {
-      final result = await Process.run(
-        'ping', ['-n', '1', '-w', '3000', host],
-        runInShell: false,
-      );
+      final args = Platform.isWindows
+          ? ['-n', '1', '-w', '3000', host]
+          : ['-c', '1', '-W', '3', host];
+      final result = await Process.run('ping', args, runInShell: false);
       final out = (result.stdout as String).toLowerCase();
-      final match = RegExp(r'time[<=](\d+)ms').firstMatch(out)
-          ?? RegExp(r'время[<=](\d+)мс').firstMatch(out);
-      if (match != null) return int.parse(match.group(1)!);
+      final match = RegExp(r'time[<=]\s*([\d.]+)\s*ms').firstMatch(out) ??
+          RegExp(r'время[<=]\s*([\d.]+)\s*мс').firstMatch(out);
+      if (match != null) return double.parse(match.group(1)!).round();
       if (out.contains('time<1ms') || out.contains('время<1мс')) return 1;
       return null;
     } catch (_) {

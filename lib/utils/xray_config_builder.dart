@@ -7,8 +7,8 @@ class XrayConfigBuilder {
   static const int httpProxyPort = 7890;
   static const int socks5Port = 10808;
 
-  /// Standalone build: HTTP + SOCKS5 inbounds, VLESS outbound.
-  /// Used for VLESS xhttp on Windows — no sing-box TUN involved.
+  /// Standalone build: http + SOCKS5 inbounds, VLESS outbound.
+  /// Used for VLESS xhttp on Windows - no sing-box TUN involved.
   static Map<String, dynamic> buildStandalone(VpnProfile profile) {
     assert(profile.protocol == VpnProtocol.vless);
     final c = profile.config;

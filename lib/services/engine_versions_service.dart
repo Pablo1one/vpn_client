@@ -17,8 +17,8 @@ class EngineVersions {
   });
 }
 
-/// Читает версии встроенных ядер (xray/sing-box — через `version`,
-/// amneziawg/wintun — из ресурсов файла) для отображения в настройках.
+/// Читает версии встроенных ядер (xray/sing-box - через `version`,
+/// amneziawg/wintun - из ресурсов файла) для отображения в настройках.
 class EngineVersionService {
   static const _dash = '—';
 
@@ -76,7 +76,7 @@ class EngineVersionService {
   }
 
   // ProductVersion из ресурсов exe/dll (Go-бинари xray/sing-box его не заполняют,
-  // поэтому для них используем `version`, а здесь — amneziawg и wintun).
+  // поэтому для них используем `version`, а здесь - amneziawg и wintun).
   Future<Map<String, String>> _fileVersions() async {
     try {
       final script =

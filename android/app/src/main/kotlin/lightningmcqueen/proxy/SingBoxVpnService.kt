@@ -52,7 +52,7 @@ class SingBoxVpnService : VpnService(), PlatformInterface, CommandServerHandler 
         private const val NOTIF_ID = 1
 
         var statusListener: ((String) -> Unit)? = null
-        // последний статус — чтобы при пересоздании активити (тап по уведомлению)
+        // последний статус - чтобы при пересоздании активити (тап по уведомлению)
         // заново подписавшийся UI сразу узнал, что коннект жив (иначе кнопка серая)
         @Volatile var currentStatus: String = "disconnected"
         @Volatile private var setupDone = false
@@ -69,7 +69,7 @@ class SingBoxVpnService : VpnService(), PlatformInterface, CommandServerHandler 
     private var notifCountry = ""        // ISO-код страны (для эмодзи-флага)
     private var statusClient: CommandClient? = null
     @Volatile private var connectedNow = false
-    // логи движка в logcat — только на debug-сборках (в release не светим домены/DNS)
+    // логи движка в logcat - только на debug-сборках (в release не светим домены/dns)
     private val isDebuggable by lazy {
         (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
     }
@@ -94,7 +94,7 @@ class SingBoxVpnService : VpnService(), PlatformInterface, CommandServerHandler 
                 }.start()
             }
             ACTION_DISCONNECT -> {
-                // кнопка «Отключить» в шторке — пользовательская остановка: сообщаем
+                // кнопка «Отключить» в шторке - пользовательская остановка: сообщаем
                 // Flutter ("userstop"), чтобы он сбросил _userWantsConnected и НЕ реконнектил
                 notifyStatus("userstop")
                 stopBox()
@@ -103,9 +103,9 @@ class SingBoxVpnService : VpnService(), PlatformInterface, CommandServerHandler 
         return START_STICKY
     }
 
-    // @Synchronized: двухфазный WARP делает два коннекта подряд из разных потоков —
+    // @Synchronized: двухфазный warp делает два коннекта подряд из разных потоков -
     // без сериализации фаза 2 видит commandServer==null и поднимает второй движок
-    // (конфликт на 127.0.0.1:9090). С синхронизацией фаза 2 ждёт фазу 1 → reload.
+    // (конфликт на 127.0.0.1:9090). С синхронизацией фаза 2 ждёт фазу 1 - reload.
     @Synchronized
     private fun startBox(config: String) {
         if (!setupDone) {
@@ -119,7 +119,7 @@ class SingBoxVpnService : VpnService(), PlatformInterface, CommandServerHandler 
         }
         val existing = commandServer
         if (existing != null) {
-            // двухфазный WARP / переключение сервера: перезагружаем сервис на том же
+            // двухфазный warp / переключение сервера: перезагружаем сервис на том же
             // CommandServer, иначе поднимется второй движок (конфликт tun0/clash_api)
             android.util.Log.i("SingBoxVpn", "reload service, config ${config.length} байт")
             existing.startOrReloadService(config, OverrideOptions())
@@ -163,7 +163,7 @@ class SingBoxVpnService : VpnService(), PlatformInterface, CommandServerHandler 
     }
 
     // ── status-клиент: живая скорость для уведомления-виджета ────────────────
-    // Подключаемся к собственному CommandServer как клиент команды Status — libbox
+    // Подключаемся к собственному CommandServer как клиент команды Status - libbox
     // раз в секунду присылает Uplink/Downlink (в т.ч. для AmneziaWG, трафик общий).
     @Synchronized
     private fun startStatusClient() {
@@ -171,8 +171,8 @@ class SingBoxVpnService : VpnService(), PlatformInterface, CommandServerHandler 
         runCatching {
             val opts = CommandClientOptions()
             opts.addCommand(Libbox.CommandStatus)
-            // логи движка → logcat (тег boxlog) только на debug-сборках: в release не
-            // светим домены/DNS в logcat
+            // логи движка - logcat (тег boxlog) только на debug-сборках: в release не
+            // светим домены/dns в logcat
             if (isDebuggable) opts.addCommand(Libbox.CommandLog)
             opts.statusInterval = 1_000_000_000L // 1 c в наносекундах
             val client = Libbox.newCommandClient(StatusHandler(), opts)
@@ -272,7 +272,7 @@ class SingBoxVpnService : VpnService(), PlatformInterface, CommandServerHandler 
         }
         networkCallback = cb
         cm.registerNetworkCallback(request, cb)
-        // сразу сообщить текущий дефолт: AWG-endpoint биндит UDP-сокет синхронно на
+        // сразу сообщить текущий дефолт: awg-endpoint биндит udp-сокет синхронно на
         // старте и не может ждать асинхронного onAvailable (иначе падает с
         // "create ipv4 connection: no available network interface")
         runCatching { cm.activeNetwork?.let { updateDefault(it, listener) } }
@@ -306,7 +306,7 @@ class SingBoxVpnService : VpnService(), PlatformInterface, CommandServerHandler 
                     (if (ni.supportsMulticast()) OsConstants.IFF_MULTICAST else 0))
                 setAddresses(StringArrayIterator(
                     ni.interfaceAddresses.mapNotNull { ia ->
-                        // у IPv6 link-local hostAddress содержит зону (%dummy0) —
+                        // у ipv6 link-local hostAddress содержит зону (%dummy0) -
                         // sing-box её в префиксе не принимает (netip.ParsePrefix паникует), срезаем
                         ia.address.hostAddress?.substringBefore('%')?.let { "$it/${ia.networkPrefixLength}" }
                     }))
@@ -328,7 +328,7 @@ class SingBoxVpnService : VpnService(), PlatformInterface, CommandServerHandler 
                     ipProto, InetSocketAddress(srcIp, srcPort), InetSocketAddress(destIp, destPort))
                 owner.userId = uid
                 packageManager.getPackagesForUid(uid)?.let {
-                    // геттер androidPackageNames() без get-префикса → property-синтаксис не работает
+                    // геттер androidPackageNames() без get-префикса - property-синтаксис не работает
                     owner.setAndroidPackageNames(StringArrayIterator(it.toList()))
                 }
             }
@@ -384,14 +384,14 @@ class SingBoxVpnService : VpnService(), PlatformInterface, CommandServerHandler 
         else
             "Подключение…"
 
-        // кнопка «Отключить» прямо в шторке → ACTION_DISCONNECT в сервис
+        // кнопка «Отключить» прямо в шторке - ACTION_DISCONNECT в сервис
         val stopIntent = Intent(this, SingBoxVpnService::class.java)
             .setAction(ACTION_DISCONNECT)
         val piFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
             PendingIntent.FLAG_IMMUTABLE else 0
         val stopPi = PendingIntent.getService(this, 0, stopIntent, piFlags)
 
-        // тап по уведомлению → открыть приложение
+        // тап по уведомлению - открыть приложение
         val openPi = packageManager.getLaunchIntentForPackage(packageName)?.let {
             PendingIntent.getActivity(this, 1, it, piFlags)
         }
@@ -400,7 +400,7 @@ class SingBoxVpnService : VpnService(), PlatformInterface, CommandServerHandler 
             .setContentTitle(title)
             .setContentText(text)
             .setSmallIcon(R.drawable.ic_notification)
-            .setColor(0xFFE10600.toInt()) // фирменный красный McQueen — подложка иконки
+            .setColor(0xFFE10600.toInt()) // фирменный красный McQueen - подложка иконки
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .apply { openPi?.let { setContentIntent(it) } }
@@ -408,7 +408,7 @@ class SingBoxVpnService : VpnService(), PlatformInterface, CommandServerHandler 
             .build()
     }
 
-    // ISO-код страны (RU/NL/…) → эмодзи-флаг через regional indicator symbols
+    // ISO-код страны (RU/NL/…) - эмодзи-флаг через regional indicator symbols
     private fun flagEmoji(cc: String): String {
         if (cc.length != 2 || !cc.all { it.isLetter() }) return ""
         val base = 0x1F1E6

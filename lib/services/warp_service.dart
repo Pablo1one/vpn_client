@@ -13,7 +13,7 @@ class WarpConfig {
   final String address;
   final String endpoint;
   final String publicKey;
-  // 3 байта client_id Cloudflare — обязательны для маршрутизации трафика WARP
+  // 3 байта client_id cloudflare - обязательны для маршрутизации трафика warp
   // (без них рукопожатие проходит, но загрузка не идёт).
   final List<int>? reserved;
 
@@ -56,7 +56,7 @@ Endpoint = $endpoint
 class WarpService {
   static const _prefKey = 'warpConfig';
 
-  // Несколько актуальных версий WARP API — пробуем по очереди
+  // Несколько актуальных версий warp api - пробуем по очереди
   static const _endpoints = [
     'https://api.cloudflareclient.com/v0a4005',
     'https://api.cloudflareclient.com/v0a3704',
@@ -84,7 +84,7 @@ class WarpService {
     await prefs.remove(_prefKey);
   }
 
-  // Сохраняет вручную введённый WireGuard-конфиг (для случаев когда API недоступен)
+  // Сохраняет вручную введённый WireGuard-конфиг (для случаев когда api недоступен)
   static Future<WarpConfig> saveManual(String wgConf) async {
     final cfg = _parseWgConf(wgConf);
     await _save(cfg);
@@ -111,10 +111,10 @@ class WarpService {
     );
   }
 
-  // Генерирует ключевую пару, регистрирует аккаунт WARP (пробует несколько эндпоинтов)
+  // Генерирует ключевую пару, регистрирует аккаунт warp (пробует несколько эндпоинтов)
   static Future<WarpConfig> register() async {
-    // WireGuard-пара ключей. На Windows — через awg.exe (как было); на остальных
-    // (Android) — X25519 в Dart, чтобы не зависеть от бинаря.
+    // WireGuard-пара ключей. На Windows - через awg.exe (как было); на остальных
+    // (ведроид) - x25519 в Dart, чтоб не зависеть от бинаря.
     final String privateKey;
     final String publicKeyLocal;
     final awgExe = File('$_binDir\\awg.exe');
@@ -176,14 +176,14 @@ class WarpService {
 
         final address = (iface['addresses'] as Map<String, dynamic>)['v4'] as String;
         final peerPub = peer['public_key'] as String;
-        // v4 приходит с портом-заглушкой :0 — нормализуем к стандартному WARP 2408
+        // v4 приходит с портом-заглушкой :0 - нормализуем к стандартному warp 2408
         final epRaw = (peer['endpoint'] as Map<String, dynamic>)['v4'] as String;
         final epCi = epRaw.lastIndexOf(':');
         final epIp = epCi >= 0 ? epRaw.substring(0, epCi) : epRaw;
         final epPort = epCi >= 0 ? (int.tryParse(epRaw.substring(epCi + 1)) ?? 0) : 0;
         final endpoint = '$epIp:${epPort > 0 ? epPort : 2408}';
 
-        // client_id → reserved (3 байта), нужен Cloudflare для маршрутизации
+        // client_id - reserved (3 байта), нужен cloudflare для маршрутизации
         List<int>? reserved;
         final clientId = config['client_id'] as String?;
         if (clientId != null && clientId.isNotEmpty) {

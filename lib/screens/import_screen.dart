@@ -89,9 +89,9 @@ class _ImportScreenState extends State<ImportScreen> {
   }
 
   Future<void> _pickFile() async {
-    // на Android/iOS у .conf нет MIME-типа → FileType.custom не открывает пикер;
-    // берём любой файл и валидируем по содержимому. withData — чтобы читать bytes
-    // (на Android путь часто content:// с null path)
+    // на Android/iOS у .conf нет mime-типа - FileType.custom не открывает пикер;
+    // берём любой файл и валидируем по содержимому. withData - чтобы читать bytes
+    // (на ведроиде путь часто content:// с null path)
     final mobile = Platform.isAndroid || Platform.isIOS;
     final result = await FilePicker.platform.pickFiles(
       type: mobile ? FileType.any : FileType.custom,

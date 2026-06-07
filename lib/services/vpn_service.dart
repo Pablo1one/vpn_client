@@ -13,7 +13,7 @@ abstract class VpnService {
 
   Stream<VpnStatus> get statusStream;
   // вызывается когда дисконнект инициирован вне UI (кнопка «Отключить» в шторке
-  // Android) — провайдер сбрасывает флаг авто-реконнекта, чтобы не переподключаться
+  // Android) - провайдер сбрасывает флаг авто-реконнекта, чтобы не переподключаться
   set onUserStop(void Function()? cb);
   Future<void> connect(String singboxConfigJson,
       {List<String> excludedApps = const [],
@@ -37,7 +37,7 @@ abstract class VpnService {
   }
 }
 
-// мобильный (android + ios)
+// мобильный (ведроид + ios)
 class _MobileVpnService implements VpnService {
   static const _method = MethodChannel('lightningmcqueen.proxy/vpn');
   static const _events = EventChannel('lightningmcqueen.proxy/vpn_events');
@@ -52,7 +52,7 @@ class _MobileVpnService implements VpnService {
     _sub = _events.receiveBroadcastStream().listen(
       (event) {
         final s = event as String;
-        // пользовательская остановка из шторки — отдельное событие, не статус
+        // пользовательская остановка из шторки - отдельное событие, не статус
         if (s == 'userstop') {
           onUserStop?.call();
           return;
@@ -111,12 +111,12 @@ class _MobileVpnService implements VpnService {
   }
 }
 
-// windows — прокси (xray или singbox) на порту 10808 плюс tun форвардер
+// windows - прокси (xray или singbox) на порту 10808 плюс tun форвардер
 class _WindowsVpnService implements VpnService {
   final _controller = StreamController<VpnStatus>.broadcast();
 
   @override
-  void Function()? onUserStop; // на Windows нет нативной кнопки в шторке — не используется
+  void Function()? onUserStop; // на Windows нет нативной кнопки в шторке - не используется
 
   Process? _process;         // tun singbox
   StreamSubscription? _outSub;
@@ -165,8 +165,8 @@ class _WindowsVpnService implements VpnService {
     _proxyConfigFile = null;
   }
 
-  // sing-box не удаляет tun0 при падении — следующий запуск упадёт с "file already exists".
-  // Условная чистка: если sing-box TUN нет (частый случай, особенно при коннекте AWG) —
+  // sing-box не удаляет tun0 при падении - следующий запуск упадёт с "file already exists".
+  // Условная чистка: если sing-box TUN нет (частый случай, особенно при коннекте awg) -
   // мгновенно выходим. Задержки только когда реально удаляли адаптер.
   static const _tunFilter = r'Get-NetAdapter -IncludeHidden | Where-Object {'
       r' ($_.Name -like "tun*" -or $_.InterfaceDescription -like "*Wintun*")'
@@ -181,7 +181,7 @@ class _WindowsVpnService implements VpnService {
   }
 
   Future<void> _removeTunAdapter() async {
-    if (await _tunAdapterCount() == 0) return; // нечего удалять — без задержек
+    if (await _tunAdapterCount() == 0) return; // нечего удалять - без задержек
     for (var i = 0; i < 10; i++) {
       await Process.run(
         'powershell',
@@ -287,7 +287,7 @@ class _WindowsVpnService implements VpnService {
   }
 
   // Авто-ретрай старта TUN-форвардера (автоматизирует ручной reconnect).
-  // ВАЖНО: убиваем только сам форвардер (_process), НЕ трогая прокси (_proxyProcess) —
+  // ВАЖНО: убиваем только сам форвардер (_process), НЕ трогая прокси (_proxyProcess) -
   // для tuic/hysteria прокси тоже sing-box, и общий taskkill убил бы его.
   Future<void> _launchTun(String configJson) async {
     const maxAttempts = 3;
@@ -297,7 +297,7 @@ class _WindowsVpnService implements VpnService {
         return;
       } catch (e) {
         // убиваем только зависший форвардер, прокси оставляем живым.
-        // Чистим и на последней попытке — иначе остался бы работающий туннель
+        // Чистим и на последней попытке - иначе остался бы работающий туннель
         // с error-статусом (серая кнопка при живом коннекте).
         try { _process?.kill(ProcessSignal.sigterm); } catch (_) {}
         try { _process?.kill(); } catch (_) {}
@@ -343,7 +343,7 @@ class _WindowsVpnService implements VpnService {
         .transform(const LineSplitter())
         .listen(log);
 
-    // последние строки лога — там фатальная ошибка (а не первые WARN/INFO)
+    // последние строки лога - там фатальная ошибка (а не первые WARN/INFO)
     String tailLog() => allLines.isEmpty
         ? '(нет вывода)'
         : (allLines.length > 12
@@ -351,15 +351,15 @@ class _WindowsVpnService implements VpnService {
                 : allLines)
             .join('\n');
 
-    // процесс умер (туннель упал позже) → сообщаем об отключении
+    // процесс умер (туннель упал позже) - сообщаем об отключении
     proc.exitCode.then((code) {
       exited = true;
       if (_process == proc) _controller.add(VpnStatus.disconnected);
     });
 
-    // Готовность — по открытию clash_api (9090), а не по строке в логе:
+    // Готовность - по открытию clash_api (9090), а не по строке в логе:
     // парсинг лога давал ложные таймауты (туннель работал, а кнопка серела).
-    // Холодный старт wintun — до ~25 с, потому бюджет ~30 с.
+    // Холодный старт wintun - до ~25 с, потому бюджет ~30 с.
     for (var i = 0; i < 60; i++) {
       if (exited) {
         throw Exception('sing-box (TUN) завершился:\n${tailLog()}');
@@ -368,7 +368,7 @@ class _WindowsVpnService implements VpnService {
         final s = await Socket.connect('127.0.0.1', 9090,
             timeout: const Duration(milliseconds: 300));
         await s.close();
-        return; // sing-box поднял clash_api → точно готов
+        return; // sing-box поднял clash_api - точно готов
       } catch (_) {}
       await Future.delayed(const Duration(milliseconds: 500));
     }
@@ -438,7 +438,7 @@ class _WindowsVpnService implements VpnService {
         throw Exception('amneziawg.exe не найден\nОжидается: ${awgExe.path}');
       }
 
-      // Убиваем только TUN (sing-box/xray) — amneziawg не трогаем,
+      // Убиваем только TUN (sing-box/xray) - amneziawg не трогаем,
       // иначе Windows Service Manager получает process в FAILED-состоянии
       // и последующий uninstall/install может сломаться
       await Process.run('taskkill', ['/F', '/IM', 'sing-box.exe'], runInShell: false);
@@ -483,7 +483,7 @@ class _WindowsVpnService implements VpnService {
       }
 
       await _waitForAwgHandshake();
-      // LSO-disable убран: под корректным MTU он душил upload (AmneziaVPN его не делает)
+      // LSO-disable убран: под корректным mtu он душил upload (AmneziaVPN его не делает)
       // await _disableAwgOffload();
       // Байпас-роут отключён для теста: wireguard-windows сам добавляет
       // endpoint-exclusion при AllowedIPs=0/0; ручной /32 может конфликтовать
@@ -497,8 +497,8 @@ class _WindowsVpnService implements VpnService {
   }
 
   // Добавляет /32-маршрут для IP сервера через физический интерфейс.
-  // /installtunnelservice не добавляет bypass-маршрут сам — без него
-  // зашифрованные AWG UDP-пакеты уходят обратно в туннель (петля) → upload ≈ 0.
+  // /installtunnelservice не добавляет bypass-маршрут сам - без него
+  // зашифрованные awg udp-пакеты уходят обратно в туннель (петля) - upload ≈ 0.
   Future<void> _ensureBypassRoute(String confContent) async {
     final match = RegExp(
       r'^Endpoint\s*=\s*([^\s:]+):\d+',
@@ -523,7 +523,7 @@ class _WindowsVpnService implements VpnService {
     }
     if (serverIp == null) return;
 
-    // Ищем дефолтный шлюз на физическом интерфейсе (не AWG)
+    // Ищем дефолтный шлюз на физическом интерфейсе (не awg)
     final gwResult = await Process.run(
       'powershell',
       [
@@ -603,11 +603,11 @@ class _WindowsVpnService implements VpnService {
 
   Future<void> _uninstallAwgTunnel() async {
     _awgActive = false;
-    if (!await _awgServiceExists()) return; // нечего удалять — мгновенно
+    if (!await _awgServiceExists()) return; // нечего удалять - мгновенно
     final awgExe = '$_binDir\\amneziawg.exe';
     await Process.run(awgExe, ['/uninstalltunnelservice', _awgTunnelName],
         runInShell: false);
-    // дожидаемся исчезновения службы; если за ~3с не ушла — принудительно
+    // дожидаемся исчезновения службы; если за ~3с не ушла - принудительно
     for (var i = 0; i < 10; i++) {
       await Future.delayed(const Duration(milliseconds: 300));
       if (!await _awgServiceExists()) return;

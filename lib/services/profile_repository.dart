@@ -20,7 +20,7 @@ class ProfileRepository {
     try {
       raw = await _storage.read(key: _key);
     } catch (_) {
-      raw = null; // хранилище недоступно — пробуем миграцию/старый файл ниже
+      raw = null; // хранилище недоступно - пробуем миграцию/старый файл ниже
     }
     // первый запуск после обновления: переносим старый плейнтекст-файл
     raw ??= await _migrateFromPlaintext();
@@ -62,7 +62,7 @@ class ProfileRepository {
     try {
       await _storage.write(key: _key, value: raw);
     } catch (_) {
-      // фолбэк: если шифрованное хранилище недоступно — пишем в файл, чтобы
+      // фолбэк: если шифрованное хранилище недоступно - пишем в файл, чтобы
       // не потерять профили (лучше плейнтекст, чем потеря данных)
       try {
         await (await _legacyFile()).writeAsString(raw);
@@ -71,7 +71,7 @@ class ProfileRepository {
   }
 
   // Переносит старый vpn_profiles.json в шифрованное хранилище и удаляет файл.
-  // Возвращает перенесённый JSON, либо null (файла нет / некорректен).
+  // Возвращает перенесённый json, либо null (файла нет / некорректен).
   Future<String?> _migrateFromPlaintext() async {
     try {
       final file = await _legacyFile();
