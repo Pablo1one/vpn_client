@@ -50,6 +50,7 @@ class VpnProvider extends ChangeNotifier {
   bool _userWantsConnected = false; // юзер хочет быть на связи (для авто-реконнекта)
   int _subRefreshHours = 12;      // период авто-обновления подписки (0 = выкл)
   Timer? _subTimer;
+  bool _subRefreshDeferred = false; // авто-обновление отложено до отключения (см. ниже)
   bool _launchOnStartup = false;  // автозапуск с Windows (+ автоконнект при старте)
   String _awgServerHost = '';
 
@@ -148,6 +149,14 @@ class VpnProvider extends ChangeNotifier {
           }
         }
         if (s != VpnStatus.error) _error = null;
+        // отложенное авто-обновление подписки: выполняем только теперь, когда
+        // туннель опущен (при коннекте пропускали, чтобы не просаживать скорость).
+        // Стоит после early-return авто-реконнекта — при обрыве с реконнектом не
+        // сработает, только при реальном отключении.
+        if (s == VpnStatus.disconnected && _subRefreshDeferred) {
+          _subRefreshDeferred = false;
+          _refreshAllSubscriptions();
+        }
         notifyListeners();
       });
     } catch (e) {
@@ -298,6 +307,13 @@ class VpnProvider extends ChangeNotifier {
   }
 
   Future<void> _refreshAllSubscriptions() async {
+    // Не дёргаем подписку при активном коннекте: запрос к URL идёт через туннель
+    // и просаживает скорость. Откладываем до отключения (флаг отработает в
+    // обработчике статуса). Ручное обновление (↻) при этом по-прежнему работает.
+    if (_status == VpnStatus.connected || _status == VpnStatus.connecting) {
+      _subRefreshDeferred = true;
+      return;
+    }
     final urls = _profiles
         .map((p) => p.subscriptionUrl)
         .whereType<String>()
@@ -746,16 +762,36 @@ class VpnProvider extends ChangeNotifier {
         await _saveSubInfo();
       }
       if (result.batch != null && result.batch!.isNotEmpty) {
+        final oldActive = _activeProfile; // запоминаем активный до пересборки
         final toRemove = _profiles.where((p) => p.subscriptionUrl == url).map((p) => p.id).toList();
-        final activeRemoved = toRemove.contains(_activeProfile?.id);
+        final activeRemoved = toRemove.contains(oldActive?.id);
         for (final id in toRemove) {
           await _repo.remove(id);
         }
-        if (activeRemoved) _activeProfile = null;
         for (final p in result.batch!) {
           await _repo.add(p);
         }
         _profiles = _repo.getAll().toList();
+        // У свежих профилей новые случайные id, поэтому активный надо переназначить
+        // на эквивалентный (по имени+серверу+порту) — иначе при живом туннеле на
+        // главной пропадает выбранный профиль («Профиль не выбран»). Туннель не трогаем.
+        if (activeRemoved && oldActive != null) {
+          VpnProfile? match;
+          for (final p in _profiles) {
+            if (p.subscriptionUrl == url &&
+                p.name == oldActive.name &&
+                p.config['server'] == oldActive.config['server'] &&
+                p.config['port'] == oldActive.config['port']) {
+              match = p;
+              break;
+            }
+          }
+          _activeProfile = match; // null только если сервер реально исчез из подписки
+          if (match != null) {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString('lastProfileId', match.id);
+          }
+        }
       }
     } finally {
       _refreshing.remove(url);
