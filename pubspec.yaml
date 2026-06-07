@@ -1,7 +1,7 @@
 name: vpn_client
 description: VPN client — Windows, Android, iOS
 publish_to: none
-version: 1.0.14+15
+version: 1.0.15+17
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -21,6 +21,7 @@ dependencies:
   country_flags: ^3.0.0
   cryptography: ^2.7.0
   flutter_secure_storage: ^9.2.2
+  mobile_scanner: ^5.2.3   # qr-импорт на мобильных (камера + barcode)
 
 dev_dependencies:
   flutter_test:

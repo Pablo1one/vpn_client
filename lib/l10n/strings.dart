@@ -71,6 +71,7 @@ class L10n {
   final String unrecognizedFormat;
   final String searchApps;
   final String openFile;
+  final String scanQr;
   final String updates;
   final String version;
   final String checkForUpdates;
@@ -79,6 +80,7 @@ class L10n {
   final String updateAvailable;
   final String updateCheckFailed;
   final String download;
+  final String install;
   final String logs;
   final String logsTitle;
   final String clearLogs;
@@ -172,6 +174,7 @@ class L10n {
     required this.unrecognizedFormat,
     required this.searchApps,
     required this.openFile,
+    required this.scanQr,
     required this.updates,
     required this.version,
     required this.checkForUpdates,
@@ -180,6 +183,7 @@ class L10n {
     required this.updateAvailable,
     required this.updateCheckFailed,
     required this.download,
+    required this.install,
     required this.logs,
     required this.logsTitle,
     required this.clearLogs,
@@ -282,6 +286,7 @@ class L10n {
         'Unrecognized format.\nSupported: vless://, tuic://, hysteria2://, vpn:// (Amnezia), WireGuard .conf, subscription url',
     searchApps: 'Search apps…',
     openFile: 'Open .conf file',
+    scanQr: 'Scan QR',
     updates: 'Updates',
     version: 'Version',
     checkForUpdates: 'Check for updates',
@@ -290,6 +295,7 @@ class L10n {
     updateAvailable: 'Update available',
     updateCheckFailed: 'Check failed',
     download: 'Download',
+    install: 'Install',
     logs: 'Logs',
     logsTitle: 'Logs',
     clearLogs: 'Clear',
@@ -385,6 +391,7 @@ class L10n {
         'Неизвестный формат.\nПоддерживается: vless://, tuic://, hysteria2://, vpn:// (Amnezia), WireGuard .conf, url подписки',
     searchApps: 'Поиск приложений…',
     openFile: 'Открыть .conf файл',
+    scanQr: 'Сканировать QR',
     updates: 'Обновления',
     version: 'Версия',
     checkForUpdates: 'Проверить обновления',
@@ -393,6 +400,7 @@ class L10n {
     updateAvailable: 'Доступно обновление',
     updateCheckFailed: 'Не удалось проверить',
     download: 'Скачать',
+    install: 'Установить',
     logs: 'Логи',
     logsTitle: 'Логи',
     clearLogs: 'Очистить',

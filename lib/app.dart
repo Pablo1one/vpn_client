@@ -2,10 +2,12 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'providers/vpn_provider.dart';
 import 'providers/language_provider.dart';
 import 'providers/theme_provider.dart';
 import 'services/tray_service.dart';
+import 'services/update_service.dart';
 import 'services/vpn_service.dart';
 import 'screens/cdn_screen.dart';
 import 'screens/home_screen.dart';
@@ -65,6 +67,63 @@ class _ShellState extends State<_Shell> with WindowListener {
       windowManager.addListener(this);
       _initTray();
     }
+    // при старте проверяем обновления и, если есть, предлагаем поставить
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybePromptUpdate());
+  }
+
+  // Попап об обновлении: «Установить» / «Отмена». Отмена - апп работает дальше.
+  Future<void> _maybePromptUpdate() async {
+    UpdateInfo? info;
+    try {
+      info = await UpdateService().check();
+    } catch (_) {
+      return; // нет сети / нет релизов - молча выходим
+    }
+    if (info == null || !mounted) return;
+    final s = L10n.of(context);
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(s.updateAvailable),
+        content: Text('v${info!.version}'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false), child: Text(s.cancel)),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true), child: Text(s.install)),
+        ],
+      ),
+    );
+    if (go == true && mounted) await _installUpdate(info);
+  }
+
+  Future<void> _installUpdate(UpdateInfo info) async {
+    if (Platform.isWindows) {
+      // неотменяемый индикатор на время загрузки; downloadAndRun сам выйдет (exit 0)
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const AlertDialog(
+          content: Row(children: [
+            SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(strokeWidth: 2)),
+            SizedBox(width: 16),
+            Expanded(child: Text('Загрузка обновления…')),
+          ]),
+        ),
+      );
+      try {
+        await UpdateService().downloadAndRun(info);
+        return; // приложение закрылось внутри
+      } catch (_) {
+        if (mounted) Navigator.of(context, rootNavigator: true).pop();
+      }
+    }
+    // ведроид / фолбэк - открыть страницу релиза (apk) в браузере
+    await launchUrl(Uri.parse(info.downloadUrl),
+        mode: LaunchMode.externalApplication);
   }
 
   Future<void> _initTray() async {

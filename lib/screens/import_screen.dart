@@ -12,6 +12,7 @@ import '../models/profile.dart';
 import '../utils/link_parser.dart';
 import '../l10n/strings.dart';
 import '../theme.dart';
+import 'qr_scan_screen.dart';
 
 class ImportScreen extends StatefulWidget {
   const ImportScreen({super.key});
@@ -77,6 +78,17 @@ class _ImportScreenState extends State<ImportScreen> {
       _error = result.error;
       _loading = false;
     });
+  }
+
+  Future<void> _scanQr() async {
+    final code = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(builder: (_) => const QrScanScreen()),
+    );
+    if (code == null || code.trim().isEmpty) return;
+    _clearFile();
+    _ctrl.text = code.trim();
+    _onChanged(code.trim());
   }
 
   Future<void> _paste() async {
@@ -193,6 +205,14 @@ class _ImportScreenState extends State<ImportScreen> {
                   suffixIcon: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      // qr-скан только на мобильных (камера)
+                      if (Platform.isAndroid || Platform.isIOS)
+                        IconButton(
+                          icon: Icon(Icons.qr_code_scanner_rounded,
+                              color: c.primary),
+                          tooltip: s.scanQr,
+                          onPressed: _scanQr,
+                        ),
                       IconButton(
                         icon: Icon(Icons.content_paste_rounded,
                             color: c.primary),
