@@ -43,6 +43,8 @@ class ConfigBuilder {
     List<String> bypassApps = const [], // split-tunnel: эти процессы идут напрямую
     List<String> excludeApps = const [], // android: пакеты мимо VPN (tun exclude_package)
     String? adsRuleSet, // путь к geosite-ads .srs (блокировка рекламы), null = выкл
+    String tunName = 'tun0', // имя tun-адаптера; на windows ротируем чтобы не упираться
+                             // в wintun-призрак от прошлой сессии (15с делей на коннекте)
   }) {
     final dnsAddr = dns.trim().isEmpty ? '8.8.8.8' : dns.trim();
     // AmneziaWG идёт endpoint'ом (форк amnezia-box), у остальных - обычный outbound
@@ -122,7 +124,7 @@ class ConfigBuilder {
         {
           'type': 'tun',
           'tag': 'tun-in',
-          'interface_name': 'tun0',
+          'interface_name': tunName,
           // Только ipv4: захват ipv6 в TUN без реального ipv6-егресса (частое на
           // Windows) ломает AAAA - "network is unreachable". ipv6 идёт мимо.
           'address': ['172.19.0.1/30'],

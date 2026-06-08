@@ -431,6 +431,9 @@ class VpnProvider extends ChangeNotifier {
         warp: warpJson,
         bypassApps: _bypassApps,
         adsRuleSet: _adsRuleSet,
+        // ротируем имя tun-адаптера: иначе wintun-призрак от прошлой сессии даёт
+        // ~15с делей (первая попытка sing-box падает с "already exists" и ретраит)
+        tunName: 'tun${DateTime.now().millisecondsSinceEpoch % 100000}',
       );
       await _vpn.connectUnified(ConfigBuilder.toJson(config));
     } else {

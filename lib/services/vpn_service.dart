@@ -182,7 +182,8 @@ class _WindowsVpnService implements VpnService {
 
   Future<int> _tunAdapterCount() async {
     final r = await Process.run(
-      'powershell', ['-Command', '@($_tunFilter).Count'],
+      'powershell',
+      ['-NoProfile', '-NonInteractive', '-Command', '@($_tunFilter).Count'],
       runInShell: false,
     );
     return int.tryParse((r.stdout as String).trim()) ?? 0;
@@ -193,7 +194,7 @@ class _WindowsVpnService implements VpnService {
     for (var i = 0; i < 10; i++) {
       await Process.run(
         'powershell',
-        ['-Command', '$_tunFilter | Remove-NetAdapter -Confirm:\$false -ErrorAction SilentlyContinue'],
+        ['-NoProfile', '-NonInteractive', '-Command', '$_tunFilter | Remove-NetAdapter -Confirm:\$false -ErrorAction SilentlyContinue'],
         runInShell: false,
       );
       await Process.run(
@@ -208,10 +209,14 @@ class _WindowsVpnService implements VpnService {
   }
 
   Future<void> _killExistingProcess() async {
-    await Process.run('taskkill', ['/F', '/IM', 'sing-box.exe'], runInShell: false);
-    await Process.run('taskkill', ['/F', '/IM', 'singbox-uni.exe'], runInShell: false);
-    await Process.run('taskkill', ['/F', '/IM', 'xray.exe'], runInShell: false);
-    await Process.run('taskkill', ['/F', '/IM', 'amneziawg.exe'], runInShell: false);
+    // параллельно: singbox-uni - наш движок, остальные - возможный мусор от старых
+    // версий (3-движковая до v1.0.16). несуществующие образы taskkill отдаёт быстро
+    await Future.wait([
+      Process.run('taskkill', ['/F', '/IM', 'singbox-uni.exe'], runInShell: false),
+      Process.run('taskkill', ['/F', '/IM', 'sing-box.exe'], runInShell: false),
+      Process.run('taskkill', ['/F', '/IM', 'xray.exe'], runInShell: false),
+      Process.run('taskkill', ['/F', '/IM', 'amneziawg.exe'], runInShell: false),
+    ]);
     // короткая пауза на завершение процессов; адаптер чистится условно
     await Future.delayed(const Duration(milliseconds: 400));
     await _removeTunAdapter();
@@ -443,15 +448,24 @@ class _WindowsVpnService implements VpnService {
   @override
   Future<void> connectUnified(String configJson) async {
     _controller.add(VpnStatus.connecting);
+    // тайминг по фазам - чтобы видеть где уходит время на коннекте
+    final sw = Stopwatch()..start();
+    void lap(String phase) {
+      LogService().add('[connect] $phase: ${sw.elapsedMilliseconds}ms');
+      sw.reset();
+    }
     try {
       final uni = File('$_binDir\\singbox-uni.exe');
       if (!uni.existsSync()) {
         throw Exception('singbox-uni.exe не найден\nОжидается: ${uni.path}');
       }
       await _ensureWintun();
-      await _uninstallAwgTunnel();
+      // _uninstallAwgTunnel убран из горячего пути: awg теперь unified (нативной
+      // службы нет), а остаточную от старой версии чистит cleanup() при старте
       await _killExistingProcess();
+      lap('killExisting+removeAdapter');
       await _launchTun(configJson, exe: uni.path);
+      lap('launchTun (wintun+движок до готовности)');
       _controller.add(VpnStatus.connected);
     } catch (e) {
       _controller.add(VpnStatus.error);
