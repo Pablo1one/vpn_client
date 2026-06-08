@@ -25,6 +25,8 @@ abstract class VpnService {
     String? tunConfigJson,
   });
   Future<void> connectAwg(String confContent);
+  // единый движок (windows): один процесс sing-box-форка (tun+аутбаунд), как на Android
+  Future<void> connectUnified(String singboxConfigJson);
   Future<void> disconnect();
   Future<void> cleanup();
   void dispose();
@@ -97,6 +99,10 @@ class _MobileVpnService implements VpnService {
   @override
   Future<void> connectAwg(String confContent) =>
       throw UnsupportedError('AWG not yet supported on mobile');
+
+  @override
+  Future<void> connectUnified(String c) =>
+      throw UnsupportedError('unified engine только на windows');
 
   @override
   Future<void> disconnect() => _method.invokeMethod('disconnect');
@@ -201,6 +207,7 @@ class _WindowsVpnService implements VpnService {
 
   Future<void> _killExistingProcess() async {
     await Process.run('taskkill', ['/F', '/IM', 'sing-box.exe'], runInShell: false);
+    await Process.run('taskkill', ['/F', '/IM', 'singbox-uni.exe'], runInShell: false);
     await Process.run('taskkill', ['/F', '/IM', 'xray.exe'], runInShell: false);
     await Process.run('taskkill', ['/F', '/IM', 'amneziawg.exe'], runInShell: false);
     // короткая пауза на завершение процессов; адаптер чистится условно
@@ -289,11 +296,11 @@ class _WindowsVpnService implements VpnService {
   // Авто-ретрай старта TUN-форвардера (автоматизирует ручной reconnect).
   // ВАЖНО: убиваем только сам форвардер (_process), НЕ трогая прокси (_proxyProcess) -
   // для tuic/hysteria прокси тоже sing-box, и общий taskkill убил бы его.
-  Future<void> _launchTun(String configJson) async {
+  Future<void> _launchTun(String configJson, {String? exe}) async {
     const maxAttempts = 3;
     for (var attempt = 0; attempt < maxAttempts; attempt++) {
       try {
-        await _launchTunOnce(configJson);
+        await _launchTunOnce(configJson, exe: exe);
         return;
       } catch (e) {
         // убиваем только зависший форвардер, прокси оставляем живым.
@@ -312,14 +319,14 @@ class _WindowsVpnService implements VpnService {
     }
   }
 
-  Future<void> _launchTunOnce(String configJson) async {
+  Future<void> _launchTunOnce(String configJson, {String? exe}) async {
     _configFile = File(
       '${Directory.systemTemp.path}\\vpn_client_tun_${DateTime.now().millisecondsSinceEpoch}.json',
     );
     await _configFile!.writeAsString(configJson);
 
     _process = await Process.start(
-      _exePath,
+      exe ?? _exePath,
       ['run', '-c', _configFile!.path],
       runInShell: false,
     );
@@ -422,6 +429,27 @@ class _WindowsVpnService implements VpnService {
       await _uninstallAwgTunnel();
       await _killExistingProcess();
       await _launchTun(configJson);
+      _controller.add(VpnStatus.connected);
+    } catch (e) {
+      _controller.add(VpnStatus.error);
+      rethrow;
+    }
+  }
+
+  // единый движок: один процесс sing-box-форка (singbox-uni.exe), tun+аутбаунд
+  // в одном конфиге (как на Android). Заменяет xray+sing-box двухпроцессную схему.
+  @override
+  Future<void> connectUnified(String configJson) async {
+    _controller.add(VpnStatus.connecting);
+    try {
+      final uni = File('$_binDir\\singbox-uni.exe');
+      if (!uni.existsSync()) {
+        throw Exception('singbox-uni.exe не найден\nОжидается: ${uni.path}');
+      }
+      await _ensureWintun();
+      await _uninstallAwgTunnel();
+      await _killExistingProcess();
+      await _launchTun(configJson, exe: uni.path);
       _controller.add(VpnStatus.connected);
     } catch (e) {
       _controller.add(VpnStatus.error);

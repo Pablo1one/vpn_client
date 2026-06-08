@@ -28,11 +28,19 @@ reality), tuic, hysteria2, amneziawg 2.0, плюс каскад через cloud
 
 ## Движки
 
-- **ведроид:** `android/app/libs/libbox.aar` - своя сборка форка **amnezia-box**
-  (форк sing-box, v1.13.8-awg2.0) через **gomobile** + go + ndk 27 + jdk 17. Один
-  движок в одном процессе на все прото.
-- **винда:** бинари в `assets/bin/` - `sing-box.exe`, `xray.exe`, `amneziawg.exe`,
-  `awg.exe`, `wintun.dll`. Гоняются как процессы, рулёжка через clash api (`:9090`).
+Оба порта теперь на одном движке - наш форк **amnezia-box** (форк sing-box,
+v1.13.8-awg2.0), один процесс на все прото (включая awg как endpoint).
+
+- **ведроид:** `android/app/libs/libbox.aar` - сборка форка через **gomobile** + go +
+  ndk 27 + jdk 17. Один движок в одном процессе.
+- **винда:** `assets/bin/singbox-uni.exe` - тот же форк, собранный под windows/amd64
+  (`go build -tags "with_gvisor,with_quic,with_wireguard,with_utls,with_clash_api,with_awg"`,
+  без `badlinkname` - иначе линк badtls падает на go 1.26). Плюс `wintun.dll` для tun.
+  Рулёжка через clash api (`:9090`), конфиг общий с ведроидом (`ConfigBuilder.build`).
+
+**Раньше на винде было 3 движка** (`xray.exe` для vless, стоковый `sing-box.exe` для
+tuic/h2/tun, `amneziawg.exe` для awg) - выпилены ради единого движка и веса. Последний
+стабильный релиз на 3 движках - **v1.0.16** (точка отката, если на едином что-то всплывёт).
 
 ## Архитектура
 
@@ -88,3 +96,21 @@ flutter build windows --release
   dpapi) через `flutter_secure_storage`.
 - Release-сборка ведроида - обфускация r8, запрет бэкапа.
 - Секреты (keystore, `key.properties`) - в `.gitignore`, в реп не попадают.
+
+## Используемые репозитории
+
+Движок и протоколы:
+- sing-box (база движка) - https://github.com/SagerNet/sing-box
+- amnezia-box / awg-форк sing-box - https://github.com/amnezia-vpn
+- amneziawg-go / amneziawg-windows (awg2.0) - https://github.com/amnezia-vpn/amneziawg-go
+- xray-core (старый vless-движок до v1.0.16) - https://github.com/XTLS/Xray-core
+- reality / xtls - https://github.com/XTLS/REALITY
+- wintun (tun-драйвер на винде) - https://www.wintun.net
+
+Сервер:
+- hiddify-manager (панель + инбаунды) - https://github.com/hiddify/hiddify-manager
+- telemt (mtproto-прокси для telegram) - на сервере, `other/telegram/telemt`
+
+Наши паблик-репы релизов (откуда тянутся апдейты):
+- винда - https://github.com/Pablo1one/vpn_client_releases
+- ведроид - https://github.com/Pablo1one/vpn_client_releases_android

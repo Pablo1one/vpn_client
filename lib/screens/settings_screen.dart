@@ -46,10 +46,16 @@ class SettingsScreen extends StatelessWidget {
             value: vpn.fragment,
             onChanged: vpn.isConnected ? null : vpn.setFragment,
           ),
-          // детальные параметры (packets/length/interval) - xray-специфика (Windows);
-          // на ведроиде sing-box фрагментирует ClientHello без этих knob'ов
-          if (vpn.fragment && !Platform.isAndroid)
-            _FragmentParamsTile(vpn: vpn, s: s),
+          // режим по tls-записям - стойче против dpi, но ломает sni-роутинг на
+          // некоторых серверах (включая наш haproxy), потому off by default
+          if (vpn.fragment)
+            SwitchListTile(
+              title: const Text('Дробить по TLS-записям'),
+              subtitle: const Text(
+                  'стойче, но не для всех серверов (если страницы не грузятся - выключить)'),
+              value: vpn.fragmentRecord,
+              onChanged: vpn.isConnected ? null : vpn.setFragmentRecord,
+            ),
           SwitchListTile(
             title: Text(s.muxTitle),
             subtitle: Text(s.muxDesc),
@@ -237,95 +243,6 @@ class _DnsTileState extends State<_DnsTile> {
 }
 
 // ── Параметры tls-фрагментации (показываются при включённой фрагментации) ─────
-
-class _FragmentParamsTile extends StatefulWidget {
-  final VpnProvider vpn;
-  final L10n s;
-  const _FragmentParamsTile({required this.vpn, required this.s});
-
-  @override
-  State<_FragmentParamsTile> createState() => _FragmentParamsTileState();
-}
-
-class _FragmentParamsTileState extends State<_FragmentParamsTile> {
-  late RangeValues _len;
-  late RangeValues _intv;
-  late String _packets;
-
-  @override
-  void initState() {
-    super.initState();
-    _len = RangeValues(
-        widget.vpn.fragLenMin.toDouble(), widget.vpn.fragLenMax.toDouble());
-    _intv = RangeValues(
-        widget.vpn.fragIntMin.toDouble(), widget.vpn.fragIntMax.toDouble());
-    _packets = widget.vpn.fragPackets;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.ac;
-    final disabled = widget.vpn.isConnected;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text('packets', style: TextStyle(fontSize: 12, color: c.textSecondary)),
-              const SizedBox(width: 12),
-              DropdownButton<String>(
-                value: _packets,
-                isDense: true,
-                items: const [
-                  DropdownMenuItem(value: 'tlshello', child: Text('tlshello')),
-                  DropdownMenuItem(value: '1-3', child: Text('1-3')),
-                  DropdownMenuItem(value: '1-2', child: Text('1-2')),
-                ],
-                onChanged: disabled
-                    ? null
-                    : (v) {
-                        if (v == null) return;
-                        setState(() => _packets = v);
-                        widget.vpn.setFragParams(packets: v);
-                      },
-              ),
-            ],
-          ),
-          Text('length: ${_len.start.round()}-${_len.end.round()}',
-              style: TextStyle(fontSize: 12, color: c.textSecondary)),
-          RangeSlider(
-            values: _len,
-            min: 0,
-            max: 300,
-            divisions: 60,
-            labels: RangeLabels('${_len.start.round()}', '${_len.end.round()}'),
-            onChanged: disabled ? null : (v) => setState(() => _len = v),
-            onChangeEnd: disabled
-                ? null
-                : (v) => widget.vpn.setFragParams(
-                    lenMin: v.start.round(), lenMax: v.end.round()),
-          ),
-          Text('interval: ${_intv.start.round()}-${_intv.end.round()}',
-              style: TextStyle(fontSize: 12, color: c.textSecondary)),
-          RangeSlider(
-            values: _intv,
-            min: 0,
-            max: 50,
-            divisions: 50,
-            labels: RangeLabels('${_intv.start.round()}', '${_intv.end.round()}'),
-            onChanged: disabled ? null : (v) => setState(() => _intv = v),
-            onChangeEnd: disabled
-                ? null
-                : (v) => widget.vpn.setFragParams(
-                    intMin: v.start.round(), intMax: v.end.round()),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 // ── Section header ────────────────────────────────────────────────────────────
 

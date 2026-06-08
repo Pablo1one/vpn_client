@@ -38,6 +38,7 @@ class ConfigBuilder {
     bool allowInsecure = false,
     bool tfo = false,
     bool fragment = false, // tls-фрагментация ClientHello (анти-dpi), только vless+tls
+    bool fragmentRecord = false, // дробить по tls-записям (стойче, но не для всех серверов)
     Map<String, dynamic>? warp, // warp-каскад: выход через cloudflare поверх сервера
     List<String> bypassApps = const [], // split-tunnel: эти процессы идут напрямую
     List<String> excludeApps = const [], // android: пакеты мимо VPN (tun exclude_package)
@@ -51,14 +52,18 @@ class ConfigBuilder {
         : switch (profile.protocol) {
             // dns-direct: резолв адреса сервера напрямую, без петли через proxy
             VpnProtocol.vless => _singboxVless(profile.config,
-                allowInsecure: allowInsecure, tfo: tfo, fragment: fragment)
+                allowInsecure: allowInsecure, tfo: tfo, fragment: fragment,
+                fragmentRecord: fragmentRecord)
               ..['domain_resolver'] = {'server': 'dns-direct', 'strategy': 'prefer_ipv4'},
             VpnProtocol.tuic => _tuic(profile.config, allowInsecure: allowInsecure),
             VpnProtocol.hysteria2 =>
               _hysteria2(profile.config, allowInsecure: allowInsecure),
             _ => throw ArgumentError('build: unsupported protocol ${profile.protocol}'),
           };
-    if (mux && outbound != null) outbound['multiplex'] = _singboxMux();
+    // mux только для vless: tuic/hysteria2 поверх quic не мультиплексируются
+    if (mux && outbound != null && profile.protocol == VpnProtocol.vless) {
+      outbound['multiplex'] = _singboxMux();
+    }
 
     final serverAddress = profile.config['server'] as String? ?? '';
     // sniff и hijack-dns - ПЕРВЫМИ: иначе dns-пакеты на приватный адрес туннеля
@@ -683,6 +688,7 @@ class ConfigBuilder {
     bool allowInsecure = false,
     bool tfo = false,
     bool fragment = false,
+    bool fragmentRecord = false,
   }) {
     final transport = c['transport'] as String? ?? 'tcp';
     final security = c['security'] as String? ?? 'none';
@@ -717,10 +723,11 @@ class ConfigBuilder {
       };
     }
 
-    // tls-фрагментация: дробим ClientHello соединения к серверу (анти-dpi, аналог
-    // xray-фрагментации на Windows). Работает с reality и tls (uTLS тоже умеет).
+    // tls-фрагментация ClientHello (анти-dpi). по умолчанию по tcp-сегментам.
+    // record_fragment (по tls-записям) - стойче против reassembly-dpi, НО ломает
+    // sni-роутинг на haproxy (sni размазан по tls-записям) - поэтому off by default.
     if (fragment && out['tls'] is Map) {
-      (out['tls'] as Map)['fragment'] = true;
+      (out['tls'] as Map)[fragmentRecord ? 'record_fragment' : 'fragment'] = true;
     }
 
     switch (transport) {

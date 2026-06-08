@@ -32,6 +32,7 @@ class VpnProvider extends ChangeNotifier {
   List<String> _bypassApps = []; // split-tunnel Windows: процессы мимо VPN
   bool _mux = false;        // мультиплексирование
   bool _fragment = false;   // tls-фрагментация (обход dpi)
+  bool _fragmentRecord = false; // по tls-записям (стойче, но не для всех серверов) vs сегменты
   // параметры фрагментации (дефолты - текущие зашитые значения)
   String _fragPackets = 'tlshello';
   int _fragLenMin = 100, _fragLenMax = 200;
@@ -65,7 +66,6 @@ class VpnProvider extends ChangeNotifier {
   final _routeCleanup = RouteCleanupService(); // очистка чужих маршрутов в обход VPN
 
   List<String>? _cachedRuCidrs;
-  List<String>? _cachedBypassAllowedIps;
 
   VpnStatus get status => _status;
   VpnProfile? get activeProfile => _activeProfile;
@@ -77,6 +77,7 @@ class VpnProvider extends ChangeNotifier {
   List<String> get bypassApps => List.from(_bypassApps);
   bool get mux => _mux;
   bool get fragment => _fragment;
+  bool get fragmentRecord => _fragmentRecord;
   String get fragPackets => _fragPackets;
   int get fragLenMin => _fragLenMin;
   int get fragLenMax => _fragLenMax;
@@ -173,6 +174,7 @@ class VpnProvider extends ChangeNotifier {
     _bypassApps = prefs.getStringList('bypassApps') ?? [];
     _mux = prefs.getBool('mux') ?? false;
     _fragment = prefs.getBool('fragment') ?? false;
+    _fragmentRecord = prefs.getBool('fragmentRecord') ?? false;
     _fragPackets = prefs.getString('fragPackets') ?? 'tlshello';
     _fragLenMin = prefs.getInt('fragLenMin') ?? 100;
     _fragLenMax = prefs.getInt('fragLenMax') ?? 200;
@@ -406,94 +408,31 @@ class VpnProvider extends ChangeNotifier {
     VpnProfile profile, {
     Map<String, dynamic>? warpJson,
   }) async {
-    if (profile.protocol == VpnProtocol.amnezia && Platform.isWindows) {
-      _awgMode = true;
-      _awgServerHost = profile.serverHost;
-      List<String>? bypassIps;
-      if (_routingMode == RoutingMode.russiaBypass) {
-        bypassIps = await _loadBypassAllowedIps();
-      }
-      final conf = ConfigBuilder.buildAwgConf(profile, bypassAllowedIps: bypassIps);
-      await _vpn.connectAwg(conf);
-    } else if (Platform.isWindows && profile.protocol == VpnProtocol.vless) {
-      final transport = (profile.config['transport'] as String? ?? 'tcp').trim();
+    // ЕДИНЫЙ ДВИЖОК (windows): все прото одним процессом sing-box-форка по тому же
+    // build()-конфигу, что на Android (включая awg как endpoint). откат на 3 движка - в v1.0.16.
+    if (Platform.isWindows) {
+      // _awgMode выкл - скорость/пинг через clash_api, как у остальных прото
+      _awgMode = false;
       final ruCidrs = _routingMode == RoutingMode.russiaBypass
           ? await _loadRuCidrs()
           : <String>[];
-      if (transport == 'grpc') {
-        // gRPC через sing-box TUN: xray 26.x deprecated gRPC - REFUSED_STREAM
-        final config = ConfigBuilder.build(
-          profile,
-          routingMode: _routingMode,
-          killSwitch: _killSwitch,
-          bypassDomains: _bypassDomains,
-          ruCidrs: ruCidrs,
-          mux: _mux,
-          dns: _dns,
-          allowInsecure: _allowInsecure,
-          tfo: _tfo,
-          warp: warpJson,
-          bypassApps: _bypassApps,
-          adsRuleSet: _adsRuleSet,
-        );
-        await _vpn.connect(ConfigBuilder.toJson(config));
-      } else {
-        // tcp, ws, xhttp, httpupgrade через xray
-        final xrayJson = ConfigBuilder.buildXrayVless(
-          profile,
-          routingMode: _routingMode,
-          ruCidrs: ruCidrs,
-          mux: _mux,
-          fragment: _fragment,
-          fragPackets: _fragPackets,
-          fragLength: '$_fragLenMin-$_fragLenMax',
-          fragInterval: '$_fragIntMin-$_fragIntMax',
-          allowInsecure: _allowInsecure,
-          tfo: _tfo,
-        );
-        final tunConfig = ConfigBuilder.buildTun(
-          killSwitch: _killSwitch,
-          routingMode: _routingMode,
-          dns: _dns,
-          ruCidrs: ruCidrs,
-          warp: warpJson,
-          bypassApps: _bypassApps,
-          adsRuleSet: _adsRuleSet,
-        );
-        await _vpn.connectProxy(
-          xrayConfigJson: xrayJson,
-          tunConfigJson: ConfigBuilder.toJson(tunConfig),
-        );
-      }
-    } else if (Platform.isWindows &&
-        (profile.protocol == VpnProtocol.tuic ||
-            profile.protocol == VpnProtocol.hysteria2)) {
-      // TUIC / H2 - sing-box proxy on :10808 + TUN sing-box forwarder
-      final ruCidrs = _routingMode == RoutingMode.russiaBypass
-          ? await _loadRuCidrs()
-          : <String>[];
-      final proxyConfig = ConfigBuilder.buildSingboxProxy(
+      final config = ConfigBuilder.build(
         profile,
         routingMode: _routingMode,
+        killSwitch: _killSwitch,
+        bypassDomains: _bypassDomains,
         ruCidrs: ruCidrs,
         mux: _mux,
         dns: _dns,
         allowInsecure: _allowInsecure,
         tfo: _tfo,
-      );
-      final tunConfig = ConfigBuilder.buildTun(
-        killSwitch: _killSwitch,
-        routingMode: _routingMode,
-        dns: _dns,
-        ruCidrs: ruCidrs,
+        fragment: _fragment,
+        fragmentRecord: _fragmentRecord,
         warp: warpJson,
         bypassApps: _bypassApps,
         adsRuleSet: _adsRuleSet,
       );
-      await _vpn.connectProxy(
-        singboxConfigJson: ConfigBuilder.toJson(proxyConfig),
-        tunConfigJson: ConfigBuilder.toJson(tunConfig),
-      );
+      await _vpn.connectUnified(ConfigBuilder.toJson(config));
     } else {
       // Mobile (and any other platform): single sing-box with full config
       // в режиме «Россия напрямую» грузим российские подсети (иначе правило
@@ -512,6 +451,7 @@ class VpnProvider extends ChangeNotifier {
         allowInsecure: _allowInsecure,
         tfo: _tfo,
         fragment: _fragment, // tls-фрагментация (тумблер в настройках)
+        fragmentRecord: _fragmentRecord,
         warp: warpJson,
         bypassApps: _bypassApps,
         excludeApps: _excludedApps, // android split-tunnel - tun exclude_package
@@ -901,6 +841,13 @@ class VpnProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setFragmentRecord(bool value) async {
+    _fragmentRecord = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('fragmentRecord', value);
+    notifyListeners();
+  }
+
   Future<void> setDns(String value) async {
     _dns = value.trim();
     final prefs = await SharedPreferences.getInstance();
@@ -996,23 +943,6 @@ class VpnProvider extends ChangeNotifier {
       return _cachedRuCidrs!;
     } catch (e) {
       debugPrint('iplist_ru load error: $e');
-      return [];
-    }
-  }
-
-  Future<List<String>> _loadBypassAllowedIps() async {
-    if (_cachedBypassAllowedIps != null) return _cachedBypassAllowedIps!;
-    try {
-      final data =
-          await rootBundle.loadString('assets/data/allowed_ips_bypass.txt');
-      _cachedBypassAllowedIps = data
-          .split('\n')
-          .map((l) => l.trim())
-          .where((l) => l.isNotEmpty && !l.startsWith('#'))
-          .toList();
-      return _cachedBypassAllowedIps!;
-    } catch (e) {
-      debugPrint('allowed_ips_bypass load error: $e');
       return [];
     }
   }
