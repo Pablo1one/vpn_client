@@ -50,6 +50,21 @@ class ConfigBuilder {
     List<RouteRule> customRules = const [], // свои правила (приоритет над режимом)
   }) {
     final dnsAddr = dns.trim().isEmpty ? '8.8.8.8' : dns.trim();
+    // android: правило "напрямую + приложение" уводим на TUN-уровень (exclude_package),
+    // чтобы трафик приложения ВООБЩЕ не входил в туннель - иначе vpn-детект (банки и пр)
+    // видит наш адрес на входе. остальные правила идут обычным route.
+    final excludePkgs = <String>[...excludeApps];
+    final effectiveCustom = <RouteRule>[];
+    for (final r in customRules) {
+      if (Platform.isAndroid &&
+          r.action == RuleAction.direct &&
+          r.match == RuleMatch.process &&
+          r.value.trim().isNotEmpty) {
+        excludePkgs.add(r.value.trim());
+      } else {
+        effectiveCustom.add(r);
+      }
+    }
     // AmneziaWG идёт endpoint'ом (форк amnezia-box), у остальных - обычный outbound
     final isAwg = profile.protocol == VpnProtocol.amnezia;
     final Map<String, dynamic>? outbound = isAwg
@@ -92,14 +107,14 @@ class ConfigBuilder {
     // свои правила (shadowrocket-подобные): приоритет над режимом и split-tunnel.
     // порядок блок -> напрямую -> через vpn: блок бьёт всё, а proxy перебивает
     // "россия напрямую" для конкретного домена/ip
-    if (customRules.isNotEmpty) {
+    if (effectiveCustom.isNotEmpty) {
       final proxyTag = warp != null ? 'warp' : 'proxy';
       // приложение: на android матчим по package_name, на windows - по process_name
       String fieldFor(RouteRule r) => r.match == RuleMatch.process
           ? (Platform.isAndroid ? 'package_name' : 'process_name')
           : r.singboxField;
       void addByAction(RuleAction a, Map<String, dynamic> Function(RouteRule) make) {
-        for (final r in customRules.where((r) => r.action == a)) {
+        for (final r in effectiveCustom.where((r) => r.action == a)) {
           if (r.value.trim().isEmpty) continue;
           rules.add(make(r));
         }
@@ -159,8 +174,9 @@ class ConfigBuilder {
           'auto_route': true,
           'strict_route': killSwitch,
           'stack': 'mixed',
-          // ведроид split-tunnel: выбранные пакеты идут мимо VPN
-          if (excludeApps.isNotEmpty) 'exclude_package': excludeApps,
+          // ведроид split-tunnel: выбранные пакеты идут мимо VPN (включая правила
+          // "напрямую + приложение" - они тут, вне туннеля, не светят наш ip)
+          if (excludePkgs.isNotEmpty) 'exclude_package': excludePkgs,
         },
       ],
       'outbounds': [
