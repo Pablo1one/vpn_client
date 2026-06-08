@@ -209,6 +209,17 @@ class _WindowsVpnService implements VpnService {
   }
 
   Future<void> _killExistingProcess() async {
+    // ВАЖНО: отвязываем текущий процесс ДО taskkill. иначе его exitCode-хендлер
+    // (см. _launchTunOnce) при kill'е эмитит disconnected посреди connect - кнопка
+    // на миг становится серой. при неожиданном обрыве _process остаётся - там обрыв
+    // ловится и идёт авто-реконнект.
+    final old = _process;
+    _process = null;
+    await _outSub?.cancel();
+    _outSub = null;
+    await _errSub?.cancel();
+    _errSub = null;
+
     // параллельно: singbox-uni - наш движок, остальные - возможный мусор от старых
     // версий (3-движковая до v1.0.16). несуществующие образы taskkill отдаёт быстро
     await Future.wait([
@@ -220,27 +231,19 @@ class _WindowsVpnService implements VpnService {
     // короткая пауза на завершение процессов; адаптер чистится условно
     await Future.delayed(const Duration(milliseconds: 400));
     await _removeTunAdapter();
-
     await _killProxy();
-    if (_process == null) {
-      return;
+    if (old != null) {
+      old.kill(ProcessSignal.sigterm);
+      await old.exitCode
+          .timeout(
+            const Duration(seconds: 3),
+            onTimeout: () {
+              old.kill();
+              return -1;
+            },
+          )
+          .catchError((_) => -1);
     }
-    await _outSub?.cancel();
-    _outSub = null;
-    await _errSub?.cancel();
-    _errSub = null;
-    final old = _process!;
-    _process = null;
-    old.kill(ProcessSignal.sigterm);
-    await old.exitCode
-        .timeout(
-          const Duration(seconds: 3),
-          onTimeout: () {
-            old.kill();
-            return -1;
-          },
-        )
-        .catchError((_) => -1);
     try { await _configFile?.delete(); } catch (_) {}
     _configFile = null;
   }

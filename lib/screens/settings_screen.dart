@@ -14,6 +14,7 @@ import '../theme.dart';
 import 'logs_screen.dart';
 import 'conn_check_screen.dart';
 import 'cdn_screen.dart';
+import 'custom_rules_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -467,9 +468,12 @@ class _RoutingModeSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.ac;
-    // split-tunnel: на ведроиде - exclude_package (excludedApps), на Windows - bypassApps
-    final perApp = Platform.isAndroid ? vpn.excludedApps : vpn.bypassApps;
-    final active = perApp.isNotEmpty;
+    final rulesCount = vpn.customRules.length;
+    final active = rulesCount > 0;
+    // активные правила: мятно-зелёный (тёмная тема) / светло-оранжевый (светлая)
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final accent =
+        isDark ? const Color(0xFF6EE7B7) : const Color(0xFFFFB74D);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
       child: Column(
@@ -496,89 +500,49 @@ class _RoutingModeSelector extends StatelessWidget {
               ),
             ],
           ),
-          // split-tunnel - независимый оверлей (поверх любого режима), не «режим»
-          if (Platform.isWindows || Platform.isAndroid) ...[
-            const SizedBox(height: 8),
-            MouseRegion(
-              cursor: SystemMouseCursors.click,
-              child: GestureDetector(
-                onTap: () => Platform.isAndroid
-                    ? _openExcludedApps(context, vpn, s)
-                    : _openSplitTunnel(context, vpn, s),
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: active ? c.upload.withOpacity(0.12) : c.surface,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: active ? c.upload.withOpacity(0.5) : c.border,
-                    ),
+          // свои правила - независимый оверлей поверх любого режима (как раньше
+          // был чип «приложения мимо VPN»)
+          const SizedBox(height: 8),
+          MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const CustomRulesScreen()),
+              ),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: active ? accent.withOpacity(0.15) : c.surface,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: active ? accent.withOpacity(0.6) : c.border,
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.call_split_rounded,
-                          size: 16, color: active ? c.upload : c.textMuted),
-                      const SizedBox(width: 8),
-                      Text(
-                        active
-                            ? '${s.splitTunnelChip} (${perApp.length})'
-                            : s.splitTunnelChip,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: active ? c.textPrimary : c.textMuted,
-                        ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.rule,
+                        size: 16, color: active ? accent : c.textMuted),
+                    const SizedBox(width: 8),
+                    Text(
+                      active ? 'Свои правила ($rulesCount)' : 'Свои правила',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: active ? c.textPrimary : c.textMuted,
                       ),
-                      const SizedBox(width: 6),
-                      Icon(Icons.chevron_right,
-                          size: 16, color: c.textMuted),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(width: 6),
+                    Icon(Icons.chevron_right, size: 16, color: c.textMuted),
+                  ],
                 ),
               ),
             ),
-          ],
+          ),
         ],
       ),
     );
-  }
-
-  Future<void> _openSplitTunnel(
-      BuildContext context, VpnProvider vpn, L10n s) async {
-    final result = await showModalBottomSheet<List<String>>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => _AppPickerSheet(
-        excluded: vpn.bypassApps,
-        s: s,
-        loadApps: () async {
-          final procs = await vpn.getRunningProcesses();
-          final have = procs.map((m) => m['package']).toSet();
-          // показать уже выбранные процессы, даже если сейчас не запущены
-          for (final exe in vpn.bypassApps) {
-            if (!have.contains(exe)) procs.add({'package': exe, 'name': exe});
-          }
-          return procs;
-        },
-      ),
-    );
-    if (result != null) vpn.setBypassApps(result);
-  }
-
-  // Android: пикер установленных приложений - exclude_package (мимо VPN)
-  Future<void> _openExcludedApps(
-      BuildContext context, VpnProvider vpn, L10n s) async {
-    final result = await showModalBottomSheet<List<String>>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => _AppPickerSheet(
-        excluded: vpn.excludedApps,
-        loadApps: vpn.getInstalledApps,
-        s: s,
-      ),
-    );
-    if (result != null) vpn.setExcludedApps(result);
   }
 }
 
@@ -687,148 +651,6 @@ class _BypassDialog extends StatelessWidget {
       );
 }
 
-// ── App picker sheet ──────────────────────────────────────────────────────────
-
-class _AppPickerSheet extends StatefulWidget {
-  final List<String> excluded;
-  final Future<List<Map<String, String>>> Function() loadApps;
-  final L10n s;
-
-  const _AppPickerSheet({
-    required this.excluded,
-    required this.loadApps,
-    required this.s,
-  });
-
-  @override
-  State<_AppPickerSheet> createState() => _AppPickerSheetState();
-}
-
-class _AppPickerSheetState extends State<_AppPickerSheet> {
-  List<Map<String, String>> _apps = [];
-  Set<String> _selected = {};
-  String _query = '';
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _selected = Set.from(widget.excluded);
-    _load();
-  }
-
-  Future<void> _load() async {
-    final apps = await widget.loadApps();
-    if (mounted) {
-      setState(() {
-        _apps = apps;
-        _loading = false;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.ac;
-    final filtered = _query.isEmpty
-        ? _apps
-        : _apps
-            .where((a) =>
-                (a['name'] ?? '').toLowerCase().contains(_query) ||
-                (a['package'] ?? '').toLowerCase().contains(_query))
-            .toList();
-
-    return DraggableScrollableSheet(
-      initialChildSize: 0.85,
-      maxChildSize: 0.95,
-      minChildSize: 0.5,
-      expand: false,
-      builder: (_, ctrl) => Column(
-        children: [
-          const SizedBox(height: 12),
-          Container(
-            width: 36,
-            height: 4,
-            decoration: BoxDecoration(
-              color: c.border,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    widget.s.perApp,
-                    style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                ),
-                FilledButton(
-                  onPressed: () =>
-                      Navigator.pop(context, _selected.toList()),
-                  child: const Text('OK'),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: TextField(
-              onChanged: (v) =>
-                  setState(() => _query = v.toLowerCase()),
-              decoration: InputDecoration(
-                hintText: widget.s.searchApps,
-                prefixIcon: const Icon(Icons.search, size: 18),
-                contentPadding:
-                    const EdgeInsets.symmetric(vertical: 10),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: _loading
-                ? Center(
-                    child: CircularProgressIndicator(color: c.primary))
-                : ListView.builder(
-                    controller: ctrl,
-                    itemCount: filtered.length,
-                    itemBuilder: (_, i) {
-                      final app = filtered[i];
-                      final pkg = app['package'] ?? '';
-                      final name = app['name'] ?? pkg;
-                      final checked = _selected.contains(pkg);
-                      return CheckboxListTile(
-                        value: checked,
-                        onChanged: (v) => setState(() {
-                          if (v == true) {
-                            _selected.add(pkg);
-                          } else {
-                            _selected.remove(pkg);
-                          }
-                        }),
-                        title: Text(name,
-                            style: const TextStyle(fontSize: 14)),
-                        subtitle: Text(pkg,
-                            style: TextStyle(
-                                fontSize: 11, color: c.textMuted)),
-                        activeColor: c.primary,
-                        checkColor: Colors.black,
-                        controlAffinity:
-                            ListTileControlAffinity.trailing,
-                        dense: true,
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 // ── Cores & versions tile ──────────────────────────────────────────────────────
 

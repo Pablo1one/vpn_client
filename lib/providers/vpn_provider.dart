@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/profile.dart';
+import '../models/route_rule.dart';
 import '../services/log_service.dart';
 import '../services/profile_repository.dart';
 import '../services/route_cleanup_service.dart';
@@ -30,6 +31,7 @@ class VpnProvider extends ChangeNotifier {
   List<String> _bypassDomains = [];
   List<String> _excludedApps = [];
   List<String> _bypassApps = []; // split-tunnel Windows: процессы мимо VPN
+  List<RouteRule> _customRules = []; // свои правила (напрямую/через vpn/блок)
   bool _mux = false;        // мультиплексирование
   bool _fragment = false;   // tls-фрагментация (обход dpi)
   bool _fragmentRecord = false; // по tls-записям (стойче, но не для всех серверов) vs сегменты
@@ -75,6 +77,7 @@ class VpnProvider extends ChangeNotifier {
   List<String> get bypassDomains => List.from(_bypassDomains);
   List<String> get excludedApps => List.from(_excludedApps);
   List<String> get bypassApps => List.from(_bypassApps);
+  List<RouteRule> get customRules => List.from(_customRules);
   bool get mux => _mux;
   bool get fragment => _fragment;
   bool get fragmentRecord => _fragmentRecord;
@@ -172,6 +175,16 @@ class VpnProvider extends ChangeNotifier {
     _bypassDomains = prefs.getStringList('bypassDomains') ?? [];
     _excludedApps = prefs.getStringList('excludedApps') ?? [];
     _bypassApps = prefs.getStringList('bypassApps') ?? [];
+    _customRules = (prefs.getStringList('customRules') ?? [])
+        .map((s) {
+          try {
+            return RouteRule.fromJson(jsonDecode(s) as Map<String, dynamic>);
+          } catch (_) {
+            return null;
+          }
+        })
+        .whereType<RouteRule>()
+        .toList();
     _mux = prefs.getBool('mux') ?? false;
     _fragment = prefs.getBool('fragment') ?? false;
     _fragmentRecord = prefs.getBool('fragmentRecord') ?? false;
@@ -434,6 +447,7 @@ class VpnProvider extends ChangeNotifier {
         // ротируем имя tun-адаптера: иначе wintun-призрак от прошлой сессии даёт
         // ~15с делей (первая попытка sing-box падает с "already exists" и ретраит)
         tunName: 'tun${DateTime.now().millisecondsSinceEpoch % 100000}',
+        customRules: _customRules,
       );
       await _vpn.connectUnified(ConfigBuilder.toJson(config));
     } else {
@@ -459,6 +473,7 @@ class VpnProvider extends ChangeNotifier {
         bypassApps: _bypassApps,
         excludeApps: _excludedApps, // android split-tunnel - tun exclude_package
         adsRuleSet: await _ensureAdsRuleSet(),
+        customRules: _customRules,
       );
       await _vpn.connect(
         ConfigBuilder.toJson(config),
@@ -849,6 +864,25 @@ class VpnProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('fragmentRecord', value);
     notifyListeners();
+  }
+
+  Future<void> addCustomRule(RouteRule rule) async {
+    _customRules.add(rule);
+    await _saveCustomRules();
+    notifyListeners();
+  }
+
+  Future<void> removeCustomRuleAt(int index) async {
+    if (index < 0 || index >= _customRules.length) return;
+    _customRules.removeAt(index);
+    await _saveCustomRules();
+    notifyListeners();
+  }
+
+  Future<void> _saveCustomRules() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(
+        'customRules', _customRules.map((r) => jsonEncode(r.toJson())).toList());
   }
 
   Future<void> setDns(String value) async {

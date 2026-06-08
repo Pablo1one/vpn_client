@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 import '../models/profile.dart';
+import '../models/route_rule.dart';
 
 enum RoutingMode { fullVpn, russiaBypass, custom }
 
@@ -45,6 +47,7 @@ class ConfigBuilder {
     String? adsRuleSet, // путь к geosite-ads .srs (блокировка рекламы), null = выкл
     String tunName = 'tun0', // имя tun-адаптера; на windows ротируем чтобы не упираться
                              // в wintun-призрак от прошлой сессии (15с делей на коннекте)
+    List<RouteRule> customRules = const [], // свои правила (приоритет над режимом)
   }) {
     final dnsAddr = dns.trim().isEmpty ? '8.8.8.8' : dns.trim();
     // AmneziaWG идёт endpoint'ом (форк amnezia-box), у остальных - обычный outbound
@@ -85,6 +88,28 @@ class ConfigBuilder {
         if (isIp) 'ip_cidr': [serverAddress] else 'domain': [serverAddress],
         'outbound': 'direct',
       });
+    }
+    // свои правила (shadowrocket-подобные): приоритет над режимом и split-tunnel.
+    // порядок блок -> напрямую -> через vpn: блок бьёт всё, а proxy перебивает
+    // "россия напрямую" для конкретного домена/ip
+    if (customRules.isNotEmpty) {
+      final proxyTag = warp != null ? 'warp' : 'proxy';
+      // приложение: на android матчим по package_name, на windows - по process_name
+      String fieldFor(RouteRule r) => r.match == RuleMatch.process
+          ? (Platform.isAndroid ? 'package_name' : 'process_name')
+          : r.singboxField;
+      void addByAction(RuleAction a, Map<String, dynamic> Function(RouteRule) make) {
+        for (final r in customRules.where((r) => r.action == a)) {
+          if (r.value.trim().isEmpty) continue;
+          rules.add(make(r));
+        }
+      }
+      addByAction(RuleAction.block,
+          (r) => {fieldFor(r): [r.value.trim()], 'action': 'reject'});
+      addByAction(RuleAction.direct,
+          (r) => {fieldFor(r): [r.value.trim()], 'outbound': 'direct'});
+      addByAction(RuleAction.proxy,
+          (r) => {fieldFor(r): [r.value.trim()], 'outbound': proxyTag});
     }
     // split-tunnel: выбранные приложения мимо VPN (напрямую)
     if (bypassApps.isNotEmpty) {
