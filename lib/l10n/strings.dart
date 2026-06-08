@@ -81,6 +81,7 @@ class L10n {
   final String updateCheckFailed;
   final String download;
   final String install;
+  final String connCheck;
   final String logs;
   final String logsTitle;
   final String clearLogs;
@@ -184,6 +185,7 @@ class L10n {
     required this.updateCheckFailed,
     required this.download,
     required this.install,
+    required this.connCheck,
     required this.logs,
     required this.logsTitle,
     required this.clearLogs,
@@ -296,6 +298,7 @@ class L10n {
     updateCheckFailed: 'Check failed',
     download: 'Download',
     install: 'Install',
+    connCheck: 'Check connection',
     logs: 'Logs',
     logsTitle: 'Logs',
     clearLogs: 'Clear',
@@ -401,6 +404,7 @@ class L10n {
     updateCheckFailed: 'Не удалось проверить',
     download: 'Скачать',
     install: 'Установить',
+    connCheck: 'Проверить соединение',
     logs: 'Логи',
     logsTitle: 'Логи',
     clearLogs: 'Очистить',

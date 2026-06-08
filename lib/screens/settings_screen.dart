@@ -12,6 +12,7 @@ import '../utils/config_builder.dart';
 import '../l10n/strings.dart';
 import '../theme.dart';
 import 'logs_screen.dart';
+import 'conn_check_screen.dart';
 import 'cdn_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -161,6 +162,17 @@ class SettingsScreen extends StatelessWidget {
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const LogsScreen()),
+            ),
+          ),
+          ListTile(
+            leading: Icon(Icons.travel_explore_outlined,
+                size: 20, color: context.ac.textMuted),
+            title: Text(s.connCheck),
+            trailing: Icon(Icons.chevron_right,
+                size: 20, color: context.ac.textMuted),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ConnCheckScreen()),
             ),
           ),
           const Divider(height: 1),
