@@ -1,7 +1,7 @@
 name: vpn_client
 description: VPN client — Windows, Android, iOS
 publish_to: none
-version: 1.0.17+19
+version: 1.0.18+20
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -41,9 +41,8 @@ flutter_launcher_icons:
 flutter:
   uses-material-design: true
   assets:
-    # единый движок на винде - наш форк amnezia-box, собранный под windows/amd64
-    - assets/bin/singbox-uni.exe
-    - assets/bin/wintun.dll
+    # winдовые бинари (singbox-uni.exe, wintun.dll) НЕ тут - их кладёт installer в
+    # {app}\bin, иначе они бандлятся в android apk (pubspec-ассеты на все платформы)
     - assets/icons/tray.ico
     - assets/data/iplist_ru.txt
     - assets/data/allowed_ips_bypass.txt

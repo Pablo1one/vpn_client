@@ -1,6 +1,6 @@
 [Setup]
 AppName=LightningMcQueen
-AppVersion=1.0.17
+AppVersion=1.0.18
 AppPublisher=LightningMcQueen
 DefaultDirName={autopf}\LightningMcQueen
 DefaultGroupName=LightningMcQueen
@@ -28,6 +28,9 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupA
 
 [Files]
 Source: "D:\vpn_client\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; движок + wintun кладём в {app}\bin (в pubspec их нет, чтобы не раздувать android apk)
+Source: "D:\vpn_client\assets\bin\singbox-uni.exe"; DestDir: "{app}\bin"; Flags: ignoreversion
+Source: "D:\vpn_client\assets\bin\wintun.dll"; DestDir: "{app}\bin"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\LightningMcQueen"; Filename: "{app}\LightningMcQueen.exe"

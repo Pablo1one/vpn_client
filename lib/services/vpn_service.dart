@@ -140,12 +140,14 @@ class _WindowsVpnService implements VpnService {
   @override
   Stream<VpnStatus> get statusStream => _controller.stream;
 
+  // движок и wintun.dll лежат в {app}\bin (кладёт installer), а НЕ в flutter_assets -
+  // иначе 43-мб singbox-uni.exe бандлится и в android apk (pubspec-ассеты идут на все платформы)
   String get _binDir {
     final appDir = File(Platform.resolvedExecutable).parent.path;
-    return '$appDir\\data\\flutter_assets\\assets\\bin';
+    return '$appDir\\bin';
   }
 
-  String get _exePath => '$_binDir\\sing-box.exe';
+  String get _exePath => '$_binDir\\singbox-uni.exe';
 
   Future<void> _ensureWintun() async {
     final src = File('$_binDir\\wintun.dll');
