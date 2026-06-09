@@ -26,14 +26,16 @@ class CustomRulesScreen extends StatelessWidget {
       appBar: AppBar(title: const Text('Свои правила')),
       body: ListView(
         children: [
-          // готовый пресет: RU-приложения мимо VPN
-          SwitchListTile(
-            title: const Text('Готовый пресет'),
-            subtitle: Text(
-                'RU-приложения мимо VPN: банки, госуслуги, маркетплейсы, vk, max, яндекс (${ruAppsPreset.length})'),
-            value: vpn.ruPreset,
-            onChanged: vpn.setRuPreset,
-          ),
+          // готовый пресет: RU-приложения мимо VPN. только android - это
+          // android package-имена, на windows (процессы .exe) они не матчатся
+          if (Platform.isAndroid)
+            SwitchListTile(
+              title: const Text('Готовый пресет'),
+              subtitle: Text(
+                  'RU-приложения мимо VPN: банки, госуслуги, маркетплейсы, vk, max, яндекс (${ruAppsPreset.length})'),
+              value: vpn.ruPreset,
+              onChanged: vpn.setRuPreset,
+            ),
           // свой пресет: импорт правил из json
           ListTile(
             leading: const Icon(Icons.file_upload_outlined),
