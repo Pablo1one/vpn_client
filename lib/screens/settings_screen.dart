@@ -465,7 +465,8 @@ class _RoutingModeSelector extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.ac;
     final rulesCount = vpn.customRules.length;
-    final active = rulesCount > 0;
+    // чип активен (цветной) если есть свои правила ИЛИ включён готовый пресет
+    final active = rulesCount > 0 || vpn.ruPreset;
     // активные правила: мятно-зелёный (тёмная тема) / светло-оранжевый (светлая)
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final accent =
@@ -523,7 +524,7 @@ class _RoutingModeSelector extends StatelessWidget {
                         size: 16, color: active ? accent : c.textMuted),
                     const SizedBox(width: 8),
                     Text(
-                      active ? 'Свои правила ($rulesCount)' : 'Свои правила',
+                      rulesCount > 0 ? 'Свои правила ($rulesCount)' : 'Свои правила',
                       style: TextStyle(
                         fontSize: 13,
                         color: active ? c.textPrimary : c.textMuted,
