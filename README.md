@@ -69,9 +69,15 @@ ui не знает, как именно поднимается туннель н
 ```
 flutter build apk --release
 ```
-Пересборка libbox (только если менялся движок): go + gomobile (форк sagernet), ndk 27 -
-`go run ./cmd/internal/build_libbox -target android` в дереве форка, результат
-`libbox.aar` кинуть в `android/app/libs/`.
+apk собирается только под arm (arm64-v8a + armeabi-v7a) - `abiFilters` в
+`android/app/build.gradle.kts`. x86/x86_64 эмуляторные не кладём (это ~85 мб). путь
+ndk/jdk должны быть в PATH (`gobind`, `javac`), иначе сборка libbox падает.
+
+Пересборка libbox (только если менялся движок): go + gomobile (форк sagernet), ndk 27,
+jdk 17 - `go run ./cmd/internal/build_libbox -target android` в дереве форка, результат
+`libbox.aar` кинуть в `android/app/libs/`. ВАЖНО: в `cmd/internal/build_libbox/main.go`
+**убран `with_tailscale`** (мы его не юзаем, он раздувал libbox.so на ~13 мб/abi). aar
+74.7 -> 59.8 мб, итоговый apk 262 -> ~123 мб.
 
 ### Винда
 Надо: visual studio build tools 2022 с компонентами **Desktop C++** и **C++ ATL**

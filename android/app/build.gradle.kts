@@ -37,6 +37,11 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // только arm (реальные телефоны). x86/x86_64 - эмуляторные, libbox.aar тащит
+        // их jniLibs (~85 мб), а --target-platform их не режет. срезаем тут
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
     }
 
     signingConfigs {
