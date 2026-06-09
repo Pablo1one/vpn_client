@@ -1,7 +1,10 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:file_picker/file_picker.dart';
 import '../models/route_rule.dart';
+import '../data/ru_apps_preset.dart';
 import '../providers/vpn_provider.dart';
 
 // экран своих правил маршрутизации: 3 группы (напрямую/через vpn/блок),
@@ -23,6 +26,22 @@ class CustomRulesScreen extends StatelessWidget {
       appBar: AppBar(title: const Text('Свои правила')),
       body: ListView(
         children: [
+          // готовый пресет: RU-приложения мимо VPN
+          SwitchListTile(
+            title: const Text('Готовый пресет'),
+            subtitle: Text(
+                'RU-приложения мимо VPN: банки, госуслуги, маркетплейсы, vk, max, яндекс (${ruAppsPreset.length})'),
+            value: vpn.ruPreset,
+            onChanged: vpn.setRuPreset,
+          ),
+          // свой пресет: импорт правил из json
+          ListTile(
+            leading: const Icon(Icons.file_upload_outlined),
+            title: const Text('Импорт из JSON'),
+            subtitle: const Text('свой пресет - список правил файлом'),
+            onTap: () => _importJson(context, vpn),
+          ),
+          const Divider(height: 1),
           if (vpn.isConnected)
             const Padding(
               padding: EdgeInsets.all(16),
@@ -40,6 +59,30 @@ class CustomRulesScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _importJson(BuildContext context, VpnProvider vpn) async {
+    final res = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['json'],
+      withData: true,
+    );
+    if (res == null || res.files.isEmpty) return;
+    String msg;
+    try {
+      final f = res.files.first;
+      final content = f.bytes != null
+          ? utf8.decode(f.bytes!)
+          : await File(f.path!).readAsString();
+      final n = await vpn.importRulesJson(content);
+      msg = 'Импортировано правил: $n';
+    } catch (e) {
+      msg = 'Ошибка импорта json';
+    }
+    if (context.mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(msg)));
+    }
   }
 }
 

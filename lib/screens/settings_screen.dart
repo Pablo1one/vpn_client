@@ -33,10 +33,6 @@ class SettingsScreen extends StatelessWidget {
           // ── Routing ─────────────────────────────────────────────────────
           _SectionHeader(s.routing),
           _RoutingModeSelector(vpn: vpn, s: s),
-          if (vpn.routingMode == RoutingMode.custom) ...[
-            const SizedBox(height: 4),
-            _BypassDomainsTile(vpn: vpn, s: s),
-          ],
           const Divider(height: 1),
 
           // ── Advanced (MUX / fragmentation / tls) ─────────────────────────
@@ -572,83 +568,6 @@ class _ModeChip extends StatelessWidget {
       showCheckmark: false,
     );
   }
-}
-
-// ── Bypass domains tile ───────────────────────────────────────────────────────
-
-class _BypassDomainsTile extends StatelessWidget {
-  final VpnProvider vpn;
-  final L10n s;
-  const _BypassDomainsTile({required this.vpn, required this.s});
-
-  @override
-  Widget build(BuildContext context) => ListTile(
-        title: Text(s.bypassDomains),
-        subtitle: Text(
-          vpn.bypassDomains.isEmpty
-              ? s.bypassDomainsDesc
-              : vpn.bypassDomains.join(', '),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
-        trailing: Icon(Icons.chevron_right,
-            size: 20, color: context.ac.textMuted),
-        onTap: () => _editBypass(context),
-      );
-
-  Future<void> _editBypass(BuildContext context) async {
-    final ctrl = TextEditingController(text: vpn.bypassDomains.join('\n'));
-    final result = await showDialog<List<String>>(
-      context: context,
-      builder: (_) => _BypassDialog(controller: ctrl, s: s),
-    );
-    if (result != null) vpn.setBypassDomains(result);
-  }
-}
-
-class _BypassDialog extends StatelessWidget {
-  final TextEditingController controller;
-  final L10n s;
-  const _BypassDialog({required this.controller, required this.s});
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-        title: Text(s.bypassDomains),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(s.bypassDomainsDesc,
-                style: TextStyle(
-                    fontSize: 13, color: context.ac.textSecondary)),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              maxLines: 8,
-              style:
-                  const TextStyle(fontSize: 13, fontFamily: 'monospace'),
-              decoration: InputDecoration(hintText: s.bypassDomainsHint),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(s.cancel),
-          ),
-          FilledButton(
-            onPressed: () {
-              final lines = controller.text
-                  .split('\n')
-                  .map((l) => l.trim())
-                  .where((l) => l.isNotEmpty)
-                  .toList();
-              Navigator.pop(context, lines);
-            },
-            child: const Text('OK'),
-          ),
-        ],
-      );
 }
 
 

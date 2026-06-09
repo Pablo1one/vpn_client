@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/profile.dart';
 import '../models/route_rule.dart';
+import '../data/ru_apps_preset.dart';
 import '../services/log_service.dart';
 import '../services/profile_repository.dart';
 import '../services/route_cleanup_service.dart';
@@ -32,6 +33,7 @@ class VpnProvider extends ChangeNotifier {
   List<String> _excludedApps = [];
   List<String> _bypassApps = []; // split-tunnel Windows: процессы мимо VPN
   List<RouteRule> _customRules = []; // свои правила (напрямую/через vpn/блок)
+  bool _ruPreset = false; // готовый пресет: ru-приложения мимо vpn
   bool _mux = false;        // мультиплексирование
   bool _fragment = false;   // tls-фрагментация (обход dpi)
   bool _fragmentRecord = false; // по tls-записям (стойче, но не для всех серверов) vs сегменты
@@ -78,6 +80,19 @@ class VpnProvider extends ChangeNotifier {
   List<String> get excludedApps => List.from(_excludedApps);
   List<String> get bypassApps => List.from(_bypassApps);
   List<RouteRule> get customRules => List.from(_customRules);
+  bool get ruPreset => _ruPreset;
+
+  // правила для движка: пресет ru-приложений (если включён) + свои правила.
+  // пресет идёт правилами "напрямую + приложение" - на android это exclude_package
+  List<RouteRule> _rulesForBuild() => [
+        if (_ruPreset)
+          for (final pkg in ruAppsPreset)
+            RouteRule(
+                action: RuleAction.direct,
+                match: RuleMatch.process,
+                value: pkg),
+        ..._customRules,
+      ];
   bool get mux => _mux;
   bool get fragment => _fragment;
   bool get fragmentRecord => _fragmentRecord;
@@ -185,6 +200,7 @@ class VpnProvider extends ChangeNotifier {
         })
         .whereType<RouteRule>()
         .toList();
+    _ruPreset = prefs.getBool('ruPreset') ?? false;
     _mux = prefs.getBool('mux') ?? false;
     _fragment = prefs.getBool('fragment') ?? false;
     _fragmentRecord = prefs.getBool('fragmentRecord') ?? false;
@@ -447,7 +463,7 @@ class VpnProvider extends ChangeNotifier {
         // ротируем имя tun-адаптера: иначе wintun-призрак от прошлой сессии даёт
         // ~15с делей (первая попытка sing-box падает с "already exists" и ретраит)
         tunName: 'tun${DateTime.now().millisecondsSinceEpoch % 100000}',
-        customRules: _customRules,
+        customRules: _rulesForBuild(),
       );
       await _vpn.connectUnified(ConfigBuilder.toJson(config));
     } else {
@@ -473,7 +489,7 @@ class VpnProvider extends ChangeNotifier {
         bypassApps: _bypassApps,
         excludeApps: _excludedApps, // android split-tunnel - tun exclude_package
         adsRuleSet: await _ensureAdsRuleSet(),
-        customRules: _customRules,
+        customRules: _rulesForBuild(),
       );
       await _vpn.connect(
         ConfigBuilder.toJson(config),
@@ -883,6 +899,30 @@ class VpnProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(
         'customRules', _customRules.map((r) => jsonEncode(r.toJson())).toList());
+  }
+
+  Future<void> setRuPreset(bool value) async {
+    _ruPreset = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('ruPreset', value);
+    notifyListeners();
+  }
+
+  // импорт правил из json-файла (список {action,match,value}) - свой пресет
+  Future<int> importRulesJson(String jsonStr) async {
+    final list = jsonDecode(jsonStr) as List;
+    var added = 0;
+    for (final e in list) {
+      try {
+        _customRules.add(RouteRule.fromJson(e as Map<String, dynamic>));
+        added++;
+      } catch (_) {}
+    }
+    if (added > 0) {
+      await _saveCustomRules();
+      notifyListeners();
+    }
+    return added;
   }
 
   Future<void> setDns(String value) async {
