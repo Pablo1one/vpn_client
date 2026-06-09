@@ -516,22 +516,6 @@ class VpnProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> connectWarp() async {
-    _error = null;
-    _warpActive = true;  // устанавливаем до подключения - cdn показывает спиннер
-    _status = VpnStatus.connecting;
-    notifyListeners();
-    try {
-      var config = await WarpService.loadSaved();
-      config ??= await WarpService.register();
-      await _vpn.connectAwg(config.toWgConf());
-    } catch (e) {
-      _warpActive = false;
-      _status = VpnStatus.error;
-      _error = e.toString();
-      notifyListeners();
-    }
-  }
 
   Future<void> resetWarp() async {
     await WarpService.clear();

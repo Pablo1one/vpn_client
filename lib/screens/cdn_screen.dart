@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/vpn_provider.dart';
-import '../services/vpn_service.dart';
 import '../services/warp_service.dart';
 import '../l10n/strings.dart';
 import '../theme.dart';
@@ -40,9 +39,6 @@ class _CdnScreenState extends State<CdnScreen> {
     final s = L10n.of(context);
     final c = context.ac;
 
-    final connected = vpn.warpActive && vpn.isConnected;
-    final busy = vpn.warpActive && vpn.isBusy;
-
     return Scaffold(
       appBar: AppBar(title: Text(s.cdnTitle)),
       body: Center(
@@ -58,14 +54,14 @@ class _CdnScreenState extends State<CdnScreen> {
                   shape: BoxShape.circle,
                   color: c.primary.withOpacity(0.1),
                   border: Border.all(
-                    color: c.primary.withOpacity(connected ? 0.8 : 0.3),
+                    color: c.primary.withOpacity(0.3),
                     width: 2,
                   ),
                 ),
                 child: Icon(
                   Icons.cloud_rounded,
                   size: 40,
-                  color: c.primary.withOpacity(connected ? 1.0 : 0.4),
+                  color: c.primary.withOpacity(0.5),
                 ),
               ),
               const SizedBox(height: 24),
@@ -83,56 +79,11 @@ class _CdnScreenState extends State<CdnScreen> {
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 13, color: c.textSecondary, height: 1.5),
               ),
-              const SizedBox(height: 32),
-              if (busy)
-                Column(
-                  children: [
-                    SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.5,
-                        color: c.primary,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      vpn.status == VpnStatus.connecting
-                          ? s.cdnRegistering
-                          : s.disconnecting,
-                      style: TextStyle(fontSize: 13, color: c.textSecondary),
-                    ),
-                  ],
-                )
-              else
-                FilledButton(
-                  onPressed: connected ? vpn.disconnect : vpn.connectWarp,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: connected ? c.secondary : c.primary,
-                    minimumSize: const Size(160, 44),
-                  ),
-                  child: Text(
-                    connected ? s.cdnDisconnect : s.cdnConnect,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-              if (vpn.error != null && !busy && vpn.warpActive == false) ...[
-                const SizedBox(height: 20),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Text(
-                    vpn.error!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                      fontSize: 12,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ],
               const SizedBox(height: 24),
-              // ── Ручной ввод конфига ────────────────────────────────────────
-              if (!connected && !busy) ...[
+              // warp работает только в КАСКАДЕ (поверх сервера) - отдельного коннекта
+              // нет. тут только управление конфигом warp: ручной ввод + сброс.
+              // ── Ручной ввод конфига warp ──────────────────────────────────
+              ...[
                 Divider(color: c.border),
                 const SizedBox(height: 8),
                 InkWell(
