@@ -163,7 +163,7 @@ class AppTheme {
         navigationBarTheme: NavigationBarThemeData(
           backgroundColor: c.navBar,
           elevation: 0,
-          indicatorColor: c.primary.withOpacity(0.15),
+          indicatorColor: c.primary.withValues(alpha: 0.15),
           iconTheme: WidgetStateProperty.resolveWith((states) {
             if (states.contains(WidgetState.selected)) {
               return IconThemeData(color: c.primary);
@@ -195,7 +195,7 @@ class AppTheme {
               (s) => s.contains(WidgetState.selected) ? c.primary : null),
           trackColor: WidgetStateProperty.resolveWith((s) =>
               s.contains(WidgetState.selected)
-                  ? c.primary.withOpacity(0.3)
+                  ? c.primary.withValues(alpha: 0.3)
                   : null),
         ),
         filledButtonTheme: FilledButtonThemeData(
@@ -234,7 +234,7 @@ class AppTheme {
         ),
         chipTheme: ChipThemeData(
           backgroundColor: c.surface,
-          selectedColor: c.primary.withOpacity(0.15),
+          selectedColor: c.primary.withValues(alpha: 0.15),
           side: BorderSide(color: c.border),
           labelStyle: const TextStyle(fontSize: 13),
           shape:
@@ -269,7 +269,7 @@ class AppTheme {
           color: c.card,
           elevation: 0,
           margin: EdgeInsets.zero,
-          shadowColor: c.primary.withOpacity(0.08),
+          shadowColor: c.primary.withValues(alpha: 0.08),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
             side: BorderSide(color: c.border),
@@ -278,7 +278,7 @@ class AppTheme {
         navigationBarTheme: NavigationBarThemeData(
           backgroundColor: c.navBar,
           elevation: 0,
-          indicatorColor: c.primary.withOpacity(0.12),
+          indicatorColor: c.primary.withValues(alpha: 0.12),
           iconTheme: WidgetStateProperty.resolveWith((states) {
             if (states.contains(WidgetState.selected)) {
               return IconThemeData(color: c.primary);
@@ -311,7 +311,7 @@ class AppTheme {
               (s) => s.contains(WidgetState.selected) ? c.primary : null),
           trackColor: WidgetStateProperty.resolveWith((s) =>
               s.contains(WidgetState.selected)
-                  ? c.primary.withOpacity(0.3)
+                  ? c.primary.withValues(alpha: 0.3)
                   : null),
         ),
         filledButtonTheme: FilledButtonThemeData(
@@ -350,7 +350,7 @@ class AppTheme {
         ),
         chipTheme: ChipThemeData(
           backgroundColor: c.surface,
-          selectedColor: c.primary.withOpacity(0.12),
+          selectedColor: c.primary.withValues(alpha: 0.12),
           side: BorderSide(color: c.border),
           labelStyle: const TextStyle(fontSize: 13),
           shape:

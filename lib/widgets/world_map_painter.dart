@@ -29,7 +29,7 @@ class WorldMapPainter extends CustomPainter {
       ..color = landColor
       ..style = PaintingStyle.fill;
     final stroke = Paint()
-      ..color = Color.lerp(landColor, Colors.black, 0.18)!.withOpacity(landColor.opacity)
+      ..color = Color.lerp(landColor, Colors.black, 0.18)!.withValues(alpha: landColor.opacity)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 0.6;
 

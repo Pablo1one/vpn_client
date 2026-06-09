@@ -52,16 +52,16 @@ class _CdnScreenState extends State<CdnScreen> {
                 height: 80,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: c.primary.withOpacity(0.1),
+                  color: c.primary.withValues(alpha: 0.1),
                   border: Border.all(
-                    color: c.primary.withOpacity(0.3),
+                    color: c.primary.withValues(alpha: 0.3),
                     width: 2,
                   ),
                 ),
                 child: Icon(
                   Icons.cloud_rounded,
                   size: 40,
-                  color: c.primary.withOpacity(0.5),
+                  color: c.primary.withValues(alpha: 0.5),
                 ),
               ),
               const SizedBox(height: 24),

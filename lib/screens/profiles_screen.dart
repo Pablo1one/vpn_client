@@ -351,7 +351,7 @@ class _ProfileAvatar extends StatelessWidget {
     final c = context.ac;
     final cc = context.read<VpnProvider>().countryCodeFor(profile.serverHost);
     final fg = isActive ? c.primary : c.textMuted;
-    final bg = isActive ? c.primary.withOpacity(0.15) : c.avatarBg;
+    final bg = isActive ? c.primary.withValues(alpha: 0.15) : c.avatarBg;
     final hasFlag = cc != null && cc.length == 2;
 
     if (!hasFlag) {
@@ -416,9 +416,9 @@ class _PingBadge extends StatelessWidget {
       margin: const EdgeInsets.only(right: 6),
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withOpacity(0.4)),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
       child: Text(
         ms == null ? '—' : '${ms}ms',
@@ -537,11 +537,11 @@ class _ProfileTile extends StatelessWidget {
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: Card(
-        color: isActive ? c.primary.withOpacity(0.07) : c.card,
+        color: isActive ? c.primary.withValues(alpha: 0.07) : c.card,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
           side: isActive
-              ? BorderSide(color: c.primary.withOpacity(0.35))
+              ? BorderSide(color: c.primary.withValues(alpha: 0.35))
               : BorderSide(color: c.border),
         ),
         child: ListTile(

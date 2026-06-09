@@ -328,12 +328,12 @@ class _ThemeChip extends StatelessWidget {
               const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
             color: selected
-                ? color.withOpacity(0.12)
+                ? color.withValues(alpha: 0.12)
                 : c.surface,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: selected
-                  ? color.withOpacity(0.5)
+                  ? color.withValues(alpha: 0.5)
                   : c.border,
               width: selected ? 1.5 : 1,
             ),
@@ -421,10 +421,10 @@ class _LangButton extends StatelessWidget {
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
           decoration: BoxDecoration(
-            color: selected ? c.primary.withOpacity(0.12) : c.surface,
+            color: selected ? c.primary.withValues(alpha: 0.12) : c.surface,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: selected ? c.primary.withOpacity(0.4) : c.border,
+              color: selected ? c.primary.withValues(alpha: 0.4) : c.border,
               width: selected ? 1.5 : 1,
             ),
           ),
@@ -511,10 +511,10 @@ class _RoutingModeSelector extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: active ? accent.withOpacity(0.15) : c.surface,
+                  color: active ? accent.withValues(alpha: 0.15) : c.surface,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: active ? accent.withOpacity(0.6) : c.border,
+                    color: active ? accent.withValues(alpha: 0.6) : c.border,
                   ),
                 ),
                 child: Row(
@@ -557,12 +557,12 @@ class _ModeChip extends StatelessWidget {
       label: Text(label),
       selected: selected,
       onSelected: (_) => onTap(),
-      selectedColor: c.primary.withOpacity(0.15),
+      selectedColor: c.primary.withValues(alpha: 0.15),
       checkmarkColor: c.primary,
       labelStyle: TextStyle(
           color: selected ? c.primary : c.textMuted, fontSize: 13),
       side: BorderSide(
-          color: selected ? c.primary.withOpacity(0.4) : c.border),
+          color: selected ? c.primary.withValues(alpha: 0.4) : c.border),
       backgroundColor: c.surface,
       shape:
           RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -789,7 +789,7 @@ class _UpdateTileState extends State<_UpdateTile> {
                   ? FilledButton.tonal(
                       onPressed: _downloadAndRun,
                       style: FilledButton.styleFrom(
-                        backgroundColor: c.primary.withOpacity(0.15),
+                        backgroundColor: c.primary.withValues(alpha: 0.15),
                         foregroundColor: c.primary,
                       ),
                       child: Text(s.download),

@@ -15,7 +15,7 @@ class WorldMapBackground extends StatelessWidget {
     return IgnorePointer(
       child: SizedBox.expand(
         child: CustomPaint(
-          painter: _WorldMapPainter(color.withOpacity(opacity)),
+          painter: _WorldMapPainter(color.withValues(alpha: opacity)),
         ),
       ),
     );

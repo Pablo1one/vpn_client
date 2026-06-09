@@ -244,8 +244,8 @@ class _ConnectButtonState extends State<_ConnectButton>
     const connectedOrange = Color(0xFFFF7A00);
     final borderColor = connected
         ? (isLight ? connectedOrange : c.upload)
-        : btnColor.withOpacity(
-            canPress ? (isLight ? 1.0 : 0.85) : (isLight ? 0.45 : 0.35));
+        : btnColor.withValues(
+            alpha: canPress ? (isLight ? 1.0 : 0.85) : (isLight ? 0.45 : 0.35));
 
     // Иконка: в светлой теме нужен контраст на насыщенной заливке; идл - молния.
     final Color iconColor;
@@ -255,10 +255,10 @@ class _ConnectButtonState extends State<_ConnectButton>
       } else if (canPress) {
         iconColor = const Color(0xFF8A1200); // тёмно-красная на жёлтом
       } else {
-        iconColor = btnColor.withOpacity(0.55);
+        iconColor = btnColor.withValues(alpha: 0.55);
       }
     } else {
-      iconColor = btnColor.withOpacity(canPress || connected || busy ? 1 : 0.3);
+      iconColor = btnColor.withValues(alpha: canPress || connected || busy ? 1 : 0.3);
     }
     final idleIcon =
         isLight ? Icons.bolt : Icons.power_settings_new_rounded;
@@ -277,8 +277,8 @@ class _ConnectButtonState extends State<_ConnectButton>
             center: const Alignment(-0.3, -0.45),
             radius: 0.95,
             colors: [
-              btnColor.withOpacity(fillHi),
-              btnColor.withOpacity(fillLo),
+              btnColor.withValues(alpha: fillHi),
+              btnColor.withValues(alpha: fillLo),
             ],
           ),
           border: Border.all(
@@ -287,19 +287,19 @@ class _ConnectButtonState extends State<_ConnectButton>
           ),
           boxShadow: connected
               ? [
-                  BoxShadow(color: c.secondary.withOpacity(0.65), blurRadius: 20, spreadRadius: 4),
-                  BoxShadow(color: c.secondary.withOpacity(0.38), blurRadius: 55, spreadRadius: 14),
-                  BoxShadow(color: c.secondary.withOpacity(0.16), blurRadius: 100, spreadRadius: 28),
+                  BoxShadow(color: c.secondary.withValues(alpha: 0.65), blurRadius: 20, spreadRadius: 4),
+                  BoxShadow(color: c.secondary.withValues(alpha: 0.38), blurRadius: 55, spreadRadius: 14),
+                  BoxShadow(color: c.secondary.withValues(alpha: 0.16), blurRadius: 100, spreadRadius: 28),
                 ]
               : [
                   // лёгкая глубина даже в покое
                   BoxShadow(
-                    color: btnColor.withOpacity(canPress ? 0.30 : 0.0),
+                    color: btnColor.withValues(alpha: canPress ? 0.30 : 0.0),
                     blurRadius: _pressed ? 6 : 18,
                     spreadRadius: _pressed ? 0 : 2,
                   ),
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.25),
+                    color: Colors.black.withValues(alpha: 0.25),
                     blurRadius: _pressed ? 3 : 10,
                     offset: Offset(0, _pressed ? 1 : 4),
                   ),
@@ -334,7 +334,7 @@ class _ConnectButtonState extends State<_ConnectButton>
                     height: 200 + _pulse.value * 14,
                     child: CircularProgressIndicator(
                       value: null,
-                      color: c.primary.withOpacity(0.15 + _pulse.value * 0.18),
+                      color: c.primary.withValues(alpha: 0.15 + _pulse.value * 0.18),
                       strokeWidth: 1.5,
                     ),
                   ),
@@ -370,7 +370,7 @@ class _ArcPainter extends CustomPainter {
         ..strokeWidth = 3.0
         ..strokeCap = StrokeCap.round
         ..shader = SweepGradient(
-          colors: [color.withOpacity(0), color],
+          colors: [color.withValues(alpha: 0), color],
           startAngle: 0,
           endAngle: 4.71,
         ).createShader(rect),
@@ -392,9 +392,9 @@ class _WarpBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
       decoration: BoxDecoration(
-        color: c.primary.withOpacity(0.15),
+        color: c.primary.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: c.primary.withOpacity(0.5)),
+        border: Border.all(color: c.primary.withValues(alpha: 0.5)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -567,7 +567,7 @@ class _Stat extends StatelessWidget {
   Widget build(BuildContext context) => Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 13, color: color.withOpacity(0.85)),
+          Icon(icon, size: 13, color: color.withValues(alpha: 0.85)),
           const SizedBox(width: 4),
           Text(value,
               style: TextStyle(
@@ -646,9 +646,9 @@ class _RoutingBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: c.primary.withOpacity(0.07),
+        color: c.primary.withValues(alpha: 0.07),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: c.primary.withOpacity(0.2)),
+        border: Border.all(color: c.primary.withValues(alpha: 0.2)),
       ),
       child: Text(label,
           style: TextStyle(
