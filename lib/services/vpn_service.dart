@@ -19,12 +19,6 @@ abstract class VpnService {
       {List<String> excludedApps = const [],
       String protocol = '',
       String country = ''});
-  Future<void> connectProxy({
-    String? singboxConfigJson,
-    String? xrayConfigJson,
-    String? tunConfigJson,
-  });
-  Future<void> connectAwg(String confContent);
   // единый движок (windows): один процесс sing-box-форка (tun+аутбаунд), как на Android
   Future<void> connectUnified(String singboxConfigJson);
   Future<void> disconnect();
@@ -89,18 +83,6 @@ class _MobileVpnService implements VpnService {
       });
 
   @override
-  Future<void> connectProxy({
-    String? singboxConfigJson,
-    String? xrayConfigJson,
-    String? tunConfigJson,
-  }) =>
-      throw UnsupportedError('Proxy mode not supported on mobile');
-
-  @override
-  Future<void> connectAwg(String confContent) =>
-      throw UnsupportedError('AWG not yet supported on mobile');
-
-  @override
   Future<void> connectUnified(String c) =>
       throw UnsupportedError('unified engine только на windows');
 
@@ -132,7 +114,6 @@ class _WindowsVpnService implements VpnService {
   Process? _proxyProcess;    // xray или singbox прокси
   File? _proxyConfigFile;
 
-  bool _awgActive = false;
   static const _awgTunnelName = VpnService.kAwgTunnelName;
   static const _regPath =
       r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings';
@@ -248,60 +229,6 @@ class _WindowsVpnService implements VpnService {
     _configFile = null;
   }
 
-  Future<void> _startProxy(String configJson, {required bool isXray}) async {
-    final exePath = isXray ? '$_binDir\\xray.exe' : _exePath;
-    final exe = File(exePath);
-    if (!exe.existsSync()) {
-      throw Exception(
-        '${isXray ? "xray" : "sing-box"}.exe не найден\nОжидается: $exePath',
-      );
-    }
-
-    _proxyConfigFile = File(
-      '${Directory.systemTemp.path}\\vpn_client_proxy_${DateTime.now().millisecondsSinceEpoch}.json',
-    );
-    await _proxyConfigFile!.writeAsString(configJson);
-
-    _proxyProcess = await Process.start(
-      exe.path,
-      ['run', '-c', _proxyConfigFile!.path],
-      runInShell: false,
-    );
-    final proc = _proxyProcess!;
-    final errLines = <String>[];
-    bool exited = false;
-
-    proc.stdout.transform(utf8.decoder).transform(const LineSplitter()).listen((l) {
-      errLines.add(l);
-      LogService().add('[proxy] $l');
-    });
-    proc.stderr.transform(utf8.decoder).transform(const LineSplitter()).listen((l) {
-      errLines.add(l);
-      LogService().add('[proxy] $l');
-    });
-    proc.exitCode.then((_) => exited = true);
-
-    // ждём открытия порта 10808 до 8 с
-    for (var i = 0; i < 16; i++) {
-      await Future.delayed(const Duration(milliseconds: 500));
-      if (exited) {
-        final log = errLines.isNotEmpty ? errLines.take(10).join('\n') : '(нет вывода)';
-        throw Exception(
-          '${isXray ? "xray" : "sing-box"} завершился до открытия порта:\n$log',
-        );
-      }
-      try {
-        final s = await Socket.connect('127.0.0.1', 10808,
-            timeout: const Duration(milliseconds: 300));
-        await s.close();
-        return;
-      } catch (_) {}
-    }
-    final log = errLines.isNotEmpty ? errLines.take(10).join('\n') : '(нет вывода)';
-    throw Exception(
-      '${isXray ? "xray" : "sing-box"} не открыл порт 10808 за 8 с:\n$log',
-    );
-  }
 
   // Авто-ретрай старта TUN-форвардера (автоматизирует ручной reconnect).
   // ВАЖНО: убиваем только сам форвардер (_process), НЕ трогая прокси (_proxyProcess) -
@@ -394,35 +321,6 @@ class _WindowsVpnService implements VpnService {
   }
 
   @override
-  Future<void> connectProxy({
-    String? singboxConfigJson,
-    String? xrayConfigJson,
-    String? tunConfigJson,
-  }) async {
-    _controller.add(VpnStatus.connecting);
-    try {
-      await _ensureWintun();
-      await _uninstallAwgTunnel();
-      await _killExistingProcess();
-
-      if (xrayConfigJson != null) {
-        await _startProxy(xrayConfigJson, isXray: true);
-      } else if (singboxConfigJson != null) {
-        await _startProxy(singboxConfigJson, isXray: false);
-      } else {
-        throw ArgumentError('singboxConfigJson or xrayConfigJson required');
-      }
-
-      if (tunConfigJson != null) {
-        await _launchTun(tunConfigJson);
-      }
-
-      _controller.add(VpnStatus.connected);
-    } catch (e) {
-      _controller.add(VpnStatus.error);
-      rethrow;
-    }
-  }
 
   @override
   Future<void> connect(String configJson,
@@ -436,7 +334,6 @@ class _WindowsVpnService implements VpnService {
         throw Exception('sing-box.exe не найден\nОжидается: ${exe.path}');
       }
       await _ensureWintun();
-      await _uninstallAwgTunnel();
       await _killExistingProcess();
       await _launchTun(configJson);
       _controller.add(VpnStatus.connected);
@@ -476,204 +373,6 @@ class _WindowsVpnService implements VpnService {
     }
   }
 
-  @override
-  Future<void> connectAwg(String confContent) async {
-    _controller.add(VpnStatus.connecting);
-    try {
-      final awgExe = File('$_binDir\\amneziawg.exe');
-      if (!awgExe.existsSync()) {
-        throw Exception('amneziawg.exe не найден\nОжидается: ${awgExe.path}');
-      }
-
-      // Убиваем только TUN (sing-box/xray) - amneziawg не трогаем,
-      // иначе Windows Service Manager получает process в FAILED-состоянии
-      // и последующий uninstall/install может сломаться
-      await Process.run('taskkill', ['/F', '/IM', 'sing-box.exe'], runInShell: false);
-      await Process.run('taskkill', ['/F', '/IM', 'xray.exe'], runInShell: false);
-      await Future.delayed(const Duration(milliseconds: 300));
-      await _removeTunAdapter();
-      await _killProxy();
-      await _outSub?.cancel(); _outSub = null;
-      await _errSub?.cancel(); _errSub = null;
-      if (_process != null) {
-        final old = _process!;
-        _process = null;
-        old.kill(ProcessSignal.sigterm);
-        await old.exitCode
-            .timeout(const Duration(seconds: 3),
-                onTimeout: () { old.kill(); return -1; })
-            .catchError((_) => -1);
-      }
-      try { await _configFile?.delete(); } catch (_) {}
-      _configFile = null;
-
-      await _uninstallAwgTunnel();
-
-      final confFile = File('${Directory.systemTemp.path}\\$_awgTunnelName.conf');
-      await confFile.writeAsString(confContent);
-
-      // Установка с авто-ретраем: при "already installed" принудительно сносим службу и повторяем
-      ProcessResult result = await Process.run(
-        awgExe.path, ['/installtunnelservice', confFile.path], runInShell: false,
-      );
-      for (var attempt = 0; attempt < 2 && result.exitCode != 0; attempt++) {
-        await _forceRemoveAwgService();
-        result = await Process.run(
-          awgExe.path, ['/installtunnelservice', confFile.path], runInShell: false,
-        );
-      }
-
-      if (result.exitCode != 0) {
-        throw Exception(
-          'amneziawg: ошибка установки туннеля (код ${result.exitCode}): ${result.stderr}',
-        );
-      }
-
-      await _waitForAwgHandshake();
-      // LSO-disable убран: под корректным mtu он душил upload (AmneziaVPN его не делает)
-      // await _disableAwgOffload();
-      // Байпас-роут отключён для теста: wireguard-windows сам добавляет
-      // endpoint-exclusion при AllowedIPs=0/0; ручной /32 может конфликтовать
-      // await _ensureBypassRoute(confContent);
-      _awgActive = true;
-      _controller.add(VpnStatus.connected);
-    } catch (e) {
-      _controller.add(VpnStatus.error);
-      rethrow;
-    }
-  }
-
-  // Добавляет /32-маршрут для IP сервера через физический интерфейс.
-  // /installtunnelservice не добавляет bypass-маршрут сам - без него
-  // зашифрованные awg udp-пакеты уходят обратно в туннель (петля) - upload ≈ 0.
-  Future<void> _ensureBypassRoute(String confContent) async {
-    final match = RegExp(
-      r'^Endpoint\s*=\s*([^\s:]+):\d+',
-      multiLine: true,
-      caseSensitive: false,
-    ).firstMatch(confContent);
-    if (match == null) return;
-
-    final host = match.group(1)!.trim();
-    String? serverIp;
-    if (RegExp(r'^\d{1,3}(\.\d{1,3}){3}$').hasMatch(host)) {
-      serverIp = host;
-    } else {
-      try {
-        final addrs = await InternetAddress.lookup(host)
-            .timeout(const Duration(seconds: 5));
-        serverIp = addrs
-            .where((a) => a.type == InternetAddressType.IPv4)
-            .map((a) => a.address)
-            .firstOrNull;
-      } catch (_) {}
-    }
-    if (serverIp == null) return;
-
-    // Ищем дефолтный шлюз на физическом интерфейсе (не awg)
-    final gwResult = await Process.run(
-      'powershell',
-      [
-        '-Command',
-        r'$r = Get-NetRoute -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue'
-            ' | Where-Object { \$_.InterfaceAlias -ne "$_awgTunnelName" }'
-            r' | Sort-Object RouteMetric | Select-Object -First 1;'
-            r' if ($r) { "$($r.NextHop)|$($r.InterfaceIndex)" }',
-      ],
-      runInShell: false,
-    );
-    final gwLine = (gwResult.stdout as String).trim();
-    if (!gwLine.contains('|')) return;
-
-    final gateway = gwLine.split('|')[0].trim();
-    final ifIndex = gwLine.split('|')[1].trim();
-    if (gateway.isEmpty || gateway == '0.0.0.0' || ifIndex.isEmpty) return;
-
-    await Process.run(
-      'powershell',
-      [
-        '-Command',
-        'New-NetRoute -DestinationPrefix "$serverIp/32"'
-            ' -InterfaceIndex $ifIndex -NextHop "$gateway"'
-            ' -RouteMetric 1 -ErrorAction SilentlyContinue',
-      ],
-      runInShell: false,
-    );
-    LogService().add('[awg] bypass route: $serverIp/32 → $gateway (if$ifIndex)');
-  }
-
-  Future<void> _disableAwgOffload() async {
-    try {
-      await Process.run(
-        'powershell',
-        [
-          '-Command',
-          'Disable-NetAdapterLso -Name "$_awgTunnelName" -ErrorAction SilentlyContinue',
-        ],
-        runInShell: false,
-      );
-      LogService().add('[awg] LSO/checksum offload disabled');
-    } catch (_) {}
-  }
-
-  Future<void> _waitForAwgHandshake() async {
-    final awgCtl = File('$_binDir\\awg.exe');
-    if (!awgCtl.existsSync()) {
-      await Future.delayed(const Duration(seconds: 10));
-      return;
-    }
-    const maxAttempts = 60;
-    for (var i = 0; i < maxAttempts; i++) {
-      await Future.delayed(const Duration(milliseconds: 500));
-      final r = await Process.run(
-        awgCtl.path,
-        ['show', _awgTunnelName],
-        runInShell: false,
-      );
-      if ((r.stdout as String).contains('latest handshake:')) return;
-    }
-    throw Exception(
-      'Туннель установлен, но сервер не отвечает.\n'
-      'Проверьте ключ или доступность сервера.',
-    );
-  }
-
-  Future<bool> _awgServiceExists() async {
-    // amneziawg.exe создаёт службу с именем AmneziaWGTunnel$<name>
-    final r = await Process.run(
-      'sc.exe', ['query', 'AmneziaWGTunnel\$$_awgTunnelName'],
-      runInShell: false,
-    );
-    // exit 0 = служба есть; 1060 = нет такой службы
-    return r.exitCode == 0;
-  }
-
-  Future<void> _uninstallAwgTunnel() async {
-    _awgActive = false;
-    if (!await _awgServiceExists()) return; // нечего удалять - мгновенно
-    final awgExe = '$_binDir\\amneziawg.exe';
-    await Process.run(awgExe, ['/uninstalltunnelservice', _awgTunnelName],
-        runInShell: false);
-    // дожидаемся исчезновения службы; если за ~3с не ушла - принудительно
-    for (var i = 0; i < 10; i++) {
-      await Future.delayed(const Duration(milliseconds: 300));
-      if (!await _awgServiceExists()) return;
-    }
-    await _forceRemoveAwgService();
-  }
-
-  // Принудительный снос службы туннеля через SCM (когда /uninstalltunnelservice не справился)
-  Future<void> _forceRemoveAwgService() async {
-    final svc = 'AmneziaWGTunnel\$$_awgTunnelName';
-    await Process.run('taskkill', ['/F', '/IM', 'amneziawg.exe'], runInShell: false);
-    await Process.run('sc.exe', ['stop', svc], runInShell: false);
-    await Process.run('sc.exe', ['delete', svc], runInShell: false);
-    for (var i = 0; i < 15; i++) {
-      await Future.delayed(const Duration(milliseconds: 300));
-      if (!await _awgServiceExists()) return;
-    }
-  }
-
   Future<void> _clearSystemProxy() async {
     await Process.run('reg', [
       'add', _regPath, '/v', 'ProxyEnable', '/t', 'REG_DWORD', '/d', '0', '/f',
@@ -683,26 +382,20 @@ class _WindowsVpnService implements VpnService {
   @override
   Future<void> cleanup() async {
     await _clearSystemProxy();
+    await Process.run('taskkill', ['/F', '/IM', 'singbox-uni.exe'], runInShell: false);
     await Process.run('taskkill', ['/F', '/IM', 'sing-box.exe'], runInShell: false);
-    await Process.run('taskkill', ['/F', '/IM', 'xray.exe'], runInShell: false);
-    await _uninstallAwgTunnel();
   }
 
   @override
   Future<void> disconnect() async {
     _controller.add(VpnStatus.disconnecting);
-    if (_awgActive) {
-      await _uninstallAwgTunnel();
-    } else {
-      await _killExistingProcess();
-    }
+    await _killExistingProcess();
     await _clearSystemProxy();
     _controller.add(VpnStatus.disconnected);
   }
 
   @override
   void dispose() {
-    if (_awgActive) _uninstallAwgTunnel();
     _proxyProcess?.kill();
     _process?.kill();
     _controller.close();
