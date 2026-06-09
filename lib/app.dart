@@ -8,8 +8,6 @@ import 'providers/language_provider.dart';
 import 'providers/theme_provider.dart';
 import 'services/tray_service.dart';
 import 'services/update_service.dart';
-import 'services/vpn_service.dart';
-import 'screens/cdn_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/profiles_screen.dart';
 import 'screens/settings_screen.dart';
@@ -56,7 +54,6 @@ class _ShellState extends State<_Shell> with WindowListener {
   static const _screens = [
     HomeScreen(),
     ProfilesScreen(),
-    CdnScreen(),
     SettingsScreen(),
   ];
 
@@ -185,11 +182,6 @@ class _ShellState extends State<_Shell> with WindowListener {
             icon: const Icon(Icons.vpn_key_outlined),
             selectedIcon: const Icon(Icons.vpn_key_rounded),
             label: s.profilesTab,
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.cloud_outlined),
-            selectedIcon: const Icon(Icons.cloud_rounded),
-            label: s.cdnTab,
           ),
           NavigationDestination(
             icon: const Icon(Icons.settings_outlined),
