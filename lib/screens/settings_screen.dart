@@ -113,6 +113,7 @@ class SettingsScreen extends StatelessWidget {
               onChanged: vpn.setLaunchOnStartup,
             ),
           if (Platform.isWindows) const _RouteCleanupTile(),
+          if (Platform.isAndroid) const _BatteryOptTile(),
           const Divider(height: 1),
 
           // ── warp ─────────────────────────────────────────────────────────
@@ -678,6 +679,71 @@ class _RouteCleanupTileState extends State<_RouteCleanupTile> {
               child: CircularProgressIndicator(strokeWidth: 2, color: c.primary),
             )
           : TextButton(onPressed: _run, child: const Text('Очистить')),
+    );
+  }
+}
+
+// ── Battery optimization tile (android) ──────────────────────────────────────
+// Doze со временем душит фоновый VpnService - скорость проседает. исключение из
+// оптимизации это снимает. при первом коннекте диалог показывается автоматически,
+// тут - ручное управление и статус (на случай если юзер отказался)
+
+class _BatteryOptTile extends StatefulWidget {
+  const _BatteryOptTile();
+
+  @override
+  State<_BatteryOptTile> createState() => _BatteryOptTileState();
+}
+
+class _BatteryOptTileState extends State<_BatteryOptTile>
+    with WidgetsBindingObserver {
+  bool? _granted;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _refresh();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  // вернулись из системного диалога - перепроверяем статус
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refresh();
+  }
+
+  Future<void> _refresh() async {
+    final g = await context.read<VpnProvider>().isBatteryUnrestricted();
+    if (mounted) setState(() => _granted = g);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.ac;
+    final granted = _granted ?? false;
+    return ListTile(
+      leading: Icon(Icons.battery_saver_rounded, size: 20, color: c.textMuted),
+      title: const Text('Фоновая работа без ограничений'),
+      subtitle: Text(
+        granted
+            ? 'Включено — энергосбережение не мешает соединению'
+            : 'Без этого энергосбережение со временем снижает скорость',
+        style: TextStyle(fontSize: 12, color: c.textMuted),
+      ),
+      trailing: granted
+          ? Icon(Icons.check_circle_rounded, size: 22, color: c.primary)
+          : TextButton(
+              onPressed: () async {
+                await context.read<VpnProvider>().requestBatteryExemption();
+              },
+              child: const Text('Разрешить'),
+            ),
     );
   }
 }

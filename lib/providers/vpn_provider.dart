@@ -419,6 +419,9 @@ class VpnProvider extends ChangeNotifier {
       if (twoPhase) _switching = false;
       _warpActive = warpJson != null;
       notifyListeners();
+      // android: при первом удачном коннекте просим исключить из оптимизации
+      // батареи - иначе Doze со временем душит VpnService и скорость проседает
+      if (Platform.isAndroid) _maybePromptBatteryExemption();
     } catch (e) {
       _switching = false;
       // отмена пользователем в процессе подключения - не показываем ошибку
@@ -1069,6 +1072,44 @@ class VpnProvider extends ChangeNotifier {
       debugPrint('getInstalledApps error: $e');
       return [];
     }
+  }
+
+  // ── Исключение из оптимизации батареи (android) ───────────────────────────
+  // без него Doze со временем деприоритизирует VpnService - скорость падает,
+  // лечится переподключением. см. project_android_doze_speed
+
+  static const _vpnCh = MethodChannel('lightningmcqueen.proxy/vpn');
+
+  // true - приложение исключено из оптимизации (Doze его не трогает).
+  // на не-android всегда true (там этой проблемы нет)
+  Future<bool> isBatteryUnrestricted() async {
+    if (!Platform.isAndroid) return true;
+    try {
+      return await _vpnCh.invokeMethod<bool>('isBatteryUnrestricted') ?? true;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  // открыть системный диалог запроса исключения (из настроек, вручную)
+  Future<void> requestBatteryExemption() async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _vpnCh.invokeMethod('requestBatteryExemption');
+    } catch (e) {
+      debugPrint('requestBatteryExemption error: $e');
+    }
+  }
+
+  // один раз при первом коннекте: если ещё не исключены - показываем диалог.
+  // флаг persist, чтобы не дёргать при каждом коннекте (отказался - не навязываем,
+  // повторно можно из настроек)
+  Future<void> _maybePromptBatteryExemption() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool('batteryPrompted') == true) return;
+    if (await isBatteryUnrestricted()) return; // уже исключены
+    await prefs.setBool('batteryPrompted', true);
+    await requestBatteryExemption();
   }
 
   @override

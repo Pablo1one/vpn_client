@@ -9,6 +9,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- исключение из оптимизации батареи: без него Doze со временем душит
+         VpnService и скорость проседает. запрашиваем при первом коннекте -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- камера для qr-импорта ключей -->
     <uses-permission android:name="android.permission.CAMERA" />
 

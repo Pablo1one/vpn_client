@@ -1,10 +1,14 @@
 package lightningmcqueen.proxy
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.net.VpnService
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
+import android.provider.Settings
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
@@ -96,6 +100,41 @@ object VpnPlugin : PluginRegistry.ActivityResultListener {
                     }
                     .sortedBy { it["name"] }
                 result.success(apps)
+            }
+            // исключено ли приложение из оптимизации батареи (Doze). если нет -
+            // ОС со временем душит фоновый VpnService и скорость проседает
+            "isBatteryUnrestricted" -> {
+                val ctx = activity
+                    ?: return result.error("NO_ACTIVITY", "no activity", null)
+                val pm = ctx.getSystemService(Context.POWER_SERVICE) as PowerManager
+                result.success(pm.isIgnoringBatteryOptimizations(ctx.packageName))
+            }
+            // открыть системный диалог запроса исключения из оптимизации батареи
+            "requestBatteryExemption" -> {
+                val ctx = activity
+                    ?: return result.error("NO_ACTIVITY", "no activity", null)
+                val pm = ctx.getSystemService(Context.POWER_SERVICE) as PowerManager
+                if (pm.isIgnoringBatteryOptimizations(ctx.packageName)) {
+                    result.success(true)
+                    return
+                }
+                try {
+                    ctx.startActivity(
+                        Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                            .setData(Uri.parse("package:${ctx.packageName}"))
+                    )
+                    result.success(true)
+                } catch (e: Exception) {
+                    // прошивки без прямого экрана - открываем общий список оптимизации
+                    try {
+                        ctx.startActivity(
+                            Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                        )
+                        result.success(true)
+                    } catch (e2: Exception) {
+                        result.error("NO_SCREEN", e2.message, null)
+                    }
+                }
             }
             else -> result.notImplemented()
         }
