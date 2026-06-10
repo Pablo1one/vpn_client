@@ -79,12 +79,15 @@ class SettingsScreen extends StatelessWidget {
             value: vpn.tfo,
             onChanged: vpn.isConnected ? null : vpn.setTfo,
           ),
-          SwitchListTile(
-            title: Text(s.killSwitch),
-            subtitle: Text(s.killSwitchDesc),
-            value: vpn.killSwitch,
-            onChanged: vpn.isConnected ? null : vpn.setKillSwitch,
-          ),
+          // kill switch временно выпилен (кнопка и функции). strict_route всегда
+          // off, брандмауэрный KillSwitchService удалён. вернуть - расскоментить тут
+          // и в vpn_provider (поле/геттер/load/setKillSwitch + killSwitch в build())
+          // SwitchListTile(
+          //   title: Text(s.killSwitch),
+          //   subtitle: Text(s.killSwitchDesc),
+          //   value: vpn.killSwitch,
+          //   onChanged: vpn.isConnected ? null : vpn.setKillSwitch,
+          // ),
           _DnsTile(vpn: vpn, s: s),
           ListTile(
             title: Text(s.subRefreshTitle),

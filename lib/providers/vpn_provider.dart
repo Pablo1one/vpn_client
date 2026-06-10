@@ -27,7 +27,7 @@ class VpnProvider extends ChangeNotifier {
   DateTime? _connectedAt;
   VpnProfile? _activeProfile;
   List<VpnProfile> _profiles = [];
-  bool _killSwitch = false;
+  // bool _killSwitch = false; // kill switch временно выпилен (см. ниже)
   RoutingMode _routingMode = RoutingMode.fullVpn;
   List<String> _bypassDomains = [];
   List<String> _excludedApps = [];
@@ -74,7 +74,7 @@ class VpnProvider extends ChangeNotifier {
   VpnStatus get status => _status;
   VpnProfile? get activeProfile => _activeProfile;
   List<VpnProfile> get profiles => List.from(_profiles);
-  bool get killSwitch => _killSwitch;
+  // bool get killSwitch => _killSwitch; // kill switch временно выпилен
   RoutingMode get routingMode => _routingMode;
   List<String> get bypassDomains => List.from(_bypassDomains);
   List<String> get excludedApps => List.from(_excludedApps);
@@ -186,7 +186,7 @@ class VpnProvider extends ChangeNotifier {
     _profiles = _repo.getAll().toList();
 
     final prefs = await SharedPreferences.getInstance();
-    _killSwitch = prefs.getBool('killSwitch') ?? false;
+    // _killSwitch = prefs.getBool('killSwitch') ?? false; // kill switch выпилен
     _bypassDomains = prefs.getStringList('bypassDomains') ?? [];
     _excludedApps = prefs.getStringList('excludedApps') ?? [];
     _bypassApps = prefs.getStringList('bypassApps') ?? [];
@@ -451,7 +451,7 @@ class VpnProvider extends ChangeNotifier {
       final config = ConfigBuilder.build(
         profile,
         routingMode: _routingMode,
-        killSwitch: _killSwitch,
+        // killSwitch: выпилен, strict_route остаётся off (дефолт false в build)
         bypassDomains: _bypassDomains,
         ruCidrs: ruCidrs,
         mux: _mux,
@@ -479,7 +479,7 @@ class VpnProvider extends ChangeNotifier {
       final config = ConfigBuilder.build(
         profile,
         routingMode: _routingMode,
-        killSwitch: _killSwitch,
+        // killSwitch: выпилен, strict_route остаётся off (дефолт false в build)
         bypassDomains: _bypassDomains,
         ruCidrs: ruCidrs,
         mux: _mux,
@@ -813,12 +813,13 @@ class VpnProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> setKillSwitch(bool value) async {
-    _killSwitch = value;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('killSwitch', value);
-    notifyListeners();
-  }
+  // kill switch временно выпилен (кнопка и функции)
+  // Future<void> setKillSwitch(bool value) async {
+  //   _killSwitch = value;
+  //   final prefs = await SharedPreferences.getInstance();
+  //   await prefs.setBool('killSwitch', value);
+  //   notifyListeners();
+  // }
 
   Future<void> setRoutingMode(RoutingMode mode) async {
     _routingMode = mode;
