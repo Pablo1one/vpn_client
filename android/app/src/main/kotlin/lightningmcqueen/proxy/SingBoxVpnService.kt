@@ -80,6 +80,10 @@ class SingBoxVpnService : VpnService(), PlatformInterface, CommandServerHandler 
                 val config = intent.getStringExtra(EXTRA_CONFIG) ?: run {
                     stopSelf(); return START_NOT_STICKY
                 }
+                // сброс флага остановки: если инстанс сервиса пережил прошлый
+                // disconnect (stopSelf асинхронный) и переиспользуется на новый
+                // connect - без сброса updateNotification/stopBox занопились бы
+                stopping = false
                 notifProtocol = intent.getStringExtra(EXTRA_PROTOCOL) ?: ""
                 notifCountry = intent.getStringExtra(EXTRA_COUNTRY) ?: ""
                 connectedNow = false
