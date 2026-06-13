@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
-# Download sing-box native libraries for Android and iOS.
+# ВНИМАНИЕ: скрипт тянет MAINLINE sing-box от SagerNet (БЕЗ AmneziaWG/xhttp).
+# Наш реальный движок - ФОРК amnezia-box (v1.13.8-awg2.0), и android/app/libs/libbox.aar
+# уже закоммичен в репозитории. Скрипт оставлен лишь как fallback для ванильной
+# сборки; для рабочего клиента используйте закоммиченный libbox.aar.
+#
+# Download sing-box native libraries for Android and iOS (MAINLINE, reference only).
 # Run from the vpn_client project root: bash scripts/download_libs.sh
 set -euo pipefail
 

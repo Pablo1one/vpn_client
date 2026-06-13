@@ -1,4 +1,9 @@
-# Download sing-box.exe + wintun.dll for Windows and place them in assets/bin/
+# ВНИМАНИЕ: качает MAINLINE sing-box.exe от SagerNet (БЕЗ AmneziaWG/xhttp).
+# Наш рабочий движок - ФОРК amnezia-box -> assets/bin/singbox-uni.exe, уже закоммичен.
+# Здесь полезна только часть с wintun.dll (она тоже закоммичена в репо).
+# Скрипт оставлен как reference; для рабочего клиента используйте singbox-uni.exe.
+#
+# Download sing-box.exe + wintun.dll for Windows and place them in assets/bin/ (reference).
 # Run from the vpn_client project root:
 #   powershell -ExecutionPolicy Bypass -File scripts\download_singbox.ps1
 
