@@ -101,6 +101,32 @@ class ProfilesScreen extends StatelessWidget {
 
 // ── Grouped list ──────────────────────────────────────────────────────────────
 
+// Логичный порядок протоколов для сортировки ключей внутри подписки:
+// VLESS Reality → xHTTP → gRPC → WS → HTTP → TCP → Hysteria2 → TUIC → AmneziaWG → WG
+int _protocolOrder(VpnProfile p) {
+  switch (p.protocol) {
+    case VpnProtocol.vless:
+      final sec = (p.config['security'] as String?) ?? 'none';
+      if (sec == 'reality') return 0;
+      final tr = (p.config['transport'] as String?) ?? 'tcp';
+      return switch (tr) {
+        'xhttp' => 1,
+        'grpc' => 2,
+        'ws' => 3,
+        'httpupgrade' || 'http' => 4,
+        _ => 5,
+      };
+    case VpnProtocol.hysteria2:
+      return 6;
+    case VpnProtocol.tuic:
+      return 7;
+    case VpnProtocol.amnezia:
+      return 8;
+    case VpnProtocol.wireguard:
+      return 9;
+  }
+}
+
 class _ProfileList extends StatelessWidget {
   final VpnProvider vpn;
   final L10n s;
@@ -116,6 +142,14 @@ class _ProfileList extends StatelessWidget {
     final subUrls =
         groups.keys.where((k) => k != null).cast<String>().toList();
     final standalone = groups[null] ?? [];
+    // сортируем ключи внутри каждой группы по логичному порядку протоколов,
+    // вторично — по имени (стабильно)
+    for (final list in groups.values) {
+      list.sort((a, b) {
+        final k = _protocolOrder(a).compareTo(_protocolOrder(b));
+        return k != 0 ? k : a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      });
+    }
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),

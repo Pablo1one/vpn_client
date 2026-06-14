@@ -22,12 +22,9 @@ class SpeedService {
 
   final _controller = StreamController<SpeedData>.broadcast();
   http.Client? _client;
-  Timer? _pingTimer;
   Timer? _awgPollTimer;
   int _pingMs = -1;
   bool _active = false;
-  String _serverHost = ''; // хост сервера, пинг бьём по нему (tcp 443)
-  String _serverIp = '';   // его IP, резолвим 1 раз (чтоб пинг не дрейфовал)
 
   // awg mode state
   String? _awgInterface;
@@ -39,39 +36,36 @@ class SpeedService {
 
   // ── Clash api (sing-box / xray) mode ──────────────────────────────────────
 
-  void start({String serverHost = ''}) {
+  // initialPing - реальный rtt до сервера, измеренный ДО подъёма туннеля (в
+  // vpn_provider). Внутри туннеля мерить нельзя: sing-box перехватывает connect к
+  // ip сервера и отдаёт заниженное (дрейф вниз 2-50мс), а clash-api /delay меряет
+  // установку соединения СКВОЗЬ прокси и раздувает. Держим статичный честный
+  // замер - rtt до фиксированного сервера за сессию стабилен.
+  void start({int initialPing = -1}) {
     if (_active) return;
     _active = true;
     _awgInterface = null;
-    _serverHost = serverHost;
-    _serverIp = '';
-    _resolveServerIp();
+    _pingMs = initialPing;
     _connectTrafficStream();
-    _measureInitialPing(); // замер один раз при подключении (без перезамера - иначе дрейф)
   }
 
   // ── awg mode (interface byte counters + icmp ping) ────────────────────────
 
-  void startAwg({required String interfaceName, String serverHost = ''}) {
+  void startAwg({required String interfaceName, int initialPing = -1}) {
     if (_active) return;
     _active = true;
     _awgInterface = interfaceName;
-    _serverHost = serverHost;
-    _serverIp = '';
-    _resolveServerIp();
+    _pingMs = initialPing;
     _prevRx = null;
     _prevTx = null;
     _prevSample = null;
     _awgPollTimer = Timer.periodic(const Duration(seconds: 1), (_) => _pollAwgStats());
-    _measureInitialPing();
   }
 
   void stop() {
     _active = false;
     _client?.close();
     _client = null;
-    _pingTimer?.cancel();
-    _pingTimer = null;
     _awgPollTimer?.cancel();
     _awgPollTimer = null;
     _pingMs = -1;
@@ -129,76 +123,6 @@ class SpeedService {
     } catch (_) {}
   }
 
-  // Пинг до САМОГО сервера (tcp-хендшейк к host:443). При активном коннекте IP
-  // сервера маршрутизируется direct (мимо туннеля), поэтому меряется реальная
-  // задержка до сервера, а не круг через туннель до внешней цели (раньше так и
-  // было - запредельные 200-500мс на главной). На нашем сервере 443 слушает
-  // haproxy, поэтому tcp отвечает для всех протоколов (vless/tuic/hysteria2/awg).
-  // Замер пинга ОДИН раз при подключении (с ретраями на прогрев туннеля). Первый
-  // успешный замер - настоящий хендшейк до сервера (~реальный rtt); дальше НЕ
-  // перезамеряем, иначе значение «дрейфует» вниз из-за переиспользования сессии
-  // к серверу (MUX/пул) - отдаёт быстрый поток без реального круга.
-  Future<void> _measureInitialPing() async {
-    for (var i = 0; i < 5; i++) {
-      if (!_active) return;
-      await _updatePing();
-      if (_pingMs > 0) return; // зафиксировали первый успешный замер
-      await Future.delayed(const Duration(seconds: 2));
-    }
-  }
-
-  Future<void> _updatePing() async {
-    if (!_active) return;
-    // Основной метод: tcp-хендшейк к САМОМУ серверу (IP:443). SYN-ACK приходит
-    // от реального сервера, подделать локально нельзя - настоящий rtt до сервера
-    // (как в «Ключах»). Бьём по запиненному IP, а не по домену - иначе значение
-    // дрейфует (домен со временем переразрешается в ближний cdn-узел - ~10мс).
-    // icmp нельзя - его перехватывает локальный tun-стек.
-    final host = _serverIp.isNotEmpty ? _serverIp : _serverHost;
-    if (host.isNotEmpty) {
-      final ms = await _tcpHandshakeMs(host, 443);
-      if (ms != null) {
-        _pingMs = ms;
-        return;
-      }
-    }
-    // Фолбэк для awg (сервер без открытого tcp 443): tcp к cdn 1.1.1.1:443 ЧЕРЕЗ
-    // туннель. Путь клиент-сервер-cdn, а cdn (anycast) вплотную к серверу, поэтому
-    // значение ≈ реальный rtt до сервера.
-    _pingMs = await _tcpHandshakeMs('1.1.1.1', 443) ?? -1;
-  }
-
-  // Резолвим хост сервера в ipv4 один раз и пинуем - чтобы пинг бил всегда в один
-  // и тот же origin, а не дрейфовал при переразрешении домена.
-  Future<void> _resolveServerIp() async {
-    final host = _serverHost;
-    if (host.isEmpty) return;
-    if (RegExp(r'^\d{1,3}(\.\d{1,3}){3}$').hasMatch(host)) {
-      _serverIp = host; // уже IP
-      return;
-    }
-    try {
-      final addrs =
-          await InternetAddress.lookup(host).timeout(const Duration(seconds: 5));
-      final v4 = addrs.where((a) => a.type == InternetAddressType.IPv4);
-      if (v4.isNotEmpty && _active) _serverIp = v4.first.address;
-    } catch (_) {}
-  }
-
-  // rtt tcp-хендшейка до host:port (мс), либо null при ошибке/таймауте.
-  Future<int?> _tcpHandshakeMs(String host, int port) async {
-    try {
-      final sw = Stopwatch()..start();
-      final socket = await Socket.connect(host, port,
-          timeout: const Duration(seconds: 3));
-      sw.stop();
-      socket.destroy();
-      return sw.elapsedMilliseconds;
-    } catch (_) {
-      return null;
-    }
-  }
-
   // ── Clash api helpers ──────────────────────────────────────────────────────
 
   Future<void> _connectTrafficStream() async {
@@ -237,11 +161,13 @@ class SpeedService {
     _controller.close();
   }
 
+  // bps - байт/с. Показываем в БИТАХ (Mbit/s), как speedtest и привычно юзеру -
+  // раньше было MB/s (байты), отсюда расхождение в разы при сравнении со speedtest.
   static String formatSpeed(int bps) {
-    if (bps <= 0) return '0 B/s';
-    if (bps < 1024) return '$bps B/s';
-    if (bps < 1024 * 1024) return '${(bps / 1024).toStringAsFixed(1)} KB/s';
-    return '${(bps / (1024 * 1024)).toStringAsFixed(2)} MB/s';
+    if (bps <= 0) return '0 Mbps';
+    final bits = bps * 8;
+    if (bits < 1000000) return '${(bits / 1000).toStringAsFixed(0)} Kbps';
+    return '${(bits / 1000000).toStringAsFixed(1)} Mbps';
   }
 
   // icmp-пинг (для awg/WG, где tcp к серверу не отвечает). Флаги ping и формат

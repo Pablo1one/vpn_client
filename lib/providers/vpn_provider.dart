@@ -57,7 +57,7 @@ class VpnProvider extends ChangeNotifier {
   Timer? _subTimer;
   bool _subRefreshDeferred = false; // авто-обновление отложено до отключения (см. ниже)
   bool _launchOnStartup = false;  // автозапуск с Windows (+ автоконнект при старте)
-  String _awgServerHost = '';
+  int _activePingMs = -1;  // rtt до сервера, замеренный ДО туннеля (для главной)
 
   final _pingResults = <String, int?>{};  // profileId - ms, null = недоступен
   bool _pinging = false;
@@ -151,10 +151,10 @@ class VpnProvider extends ChangeNotifier {
           if (_awgMode) {
             _speed.startAwg(
               interfaceName: VpnService.kAwgTunnelName,
-              serverHost: _awgServerHost,
+              initialPing: _activePingMs,
             );
           } else {
-            _speed.start(serverHost: _activeProfile?.serverHost ?? '');
+            _speed.start(initialPing: _activePingMs);
           }
         } else {
           _connectedAt = null;
@@ -380,6 +380,15 @@ class VpnProvider extends ChangeNotifier {
     try {
       final profile = _activeProfile!;
 
+      // пинг до сервера меряем СЕЙЧАС - туннель ещё не поднят, поэтому tcp-хендшейк
+      // идёт напрямую и даёт настоящий rtt (внутри туннеля sing-box перехватывает
+      // connect к ip сервера и отдаёт заниженное). Если уже мерили на «Ключах» -
+      // берём оттуда. Значение статично держим на главной (rtt за сессию стабилен).
+      final pre = _pingResults[profile.id];
+      _activePingMs = (pre != null && pre > 0)
+          ? pre
+          : (await _measureServerRtt(profile.serverHost) ?? -1);
+
       // в режиме весь трафик через впн чистим чужие маршруты мимо туннеля
       // (сторонний split-tunnel пишет тысячи ру-подсетей на шлюз и трафик утекает)
       if (_routingMode == RoutingMode.fullVpn && Platform.isWindows) {
@@ -523,6 +532,22 @@ class VpnProvider extends ChangeNotifier {
   Future<void> resetWarp() async {
     await WarpService.clear();
     notifyListeners();
+  }
+
+  // rtt до сервера одним tcp-хендшейком к :443 (haproxy/nginx отвечают для всех
+  // прото). Зовём ДО подъёма туннеля - тогда хендшейк идёт напрямую = реальный rtt.
+  Future<int?> _measureServerRtt(String host) async {
+    if (host.isEmpty) return null;
+    try {
+      final sw = Stopwatch()..start();
+      final sock =
+          await Socket.connect(host, 443, timeout: const Duration(seconds: 3));
+      sw.stop();
+      await sock.close();
+      return sw.elapsedMilliseconds;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> pingAll() async {
