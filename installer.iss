@@ -1,6 +1,6 @@
 [Setup]
 AppName=LightningMcQueen
-AppVersion=1.0.29
+AppVersion=1.0.30
 AppPublisher=LightningMcQueen
 DefaultDirName={autopf}\LightningMcQueen
 DefaultGroupName=LightningMcQueen
